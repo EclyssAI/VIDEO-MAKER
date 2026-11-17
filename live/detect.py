@@ -36,7 +36,7 @@ def run(batch):
                 "words": transcribe(src, s, e, st["lang"])})
     (batch/"pending.json").write_text(json.dumps(clips, ensure_ascii=False, indent=1))
     # versão compacta para o Claude (economia de tokens): só texto
-    (batch/"for_claude.txt").write_text("\n".join(f"{c['id']} [{c['lang']}] +{c['strength']}dB: " + " ".join(w["w"] for w in c["words"]) for c in clips))
+    (batch/"for_claude.txt").write_text("\n".join(f"{c['id']} [{c['lang']}] pico={c['peak']:.1f}s +{c['strength']}dB: " + " | ".join(f"{g[0]['s']:.1f}-{g[-1]['e']:.1f} " + " ".join(w["w"] for w in g) for g in (c["words"][i:i+3] for i in range(0, len(c["words"]), 3))) for c in clips))
     return clips
 
 if __name__ == "__main__": print(len(run(pathlib.Path(sys.argv[1]))), "clips")
