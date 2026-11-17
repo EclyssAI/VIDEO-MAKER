@@ -7,6 +7,15 @@ CH = yaml.safe_load((R/"config/channel.yaml").read_text()); A = R/"template/asse
 def ts(t): return f"0:{int(t//60):02d}:{t%60:05.2f}"
 def esc(s): return s.replace("{", "(").replace("}", ")")
 
+def fit(t, max_chars=12):
+    """Quebra em 2 linhas e reduz a fonte p/ caber ao lado da mascote (área ~600px)."""
+    t = t.upper(); w = t.split()
+    if len(t) > max_chars and len(w) > 1:
+        best = min(range(1, len(w)), key=lambda i: abs(len(" ".join(w[:i])) - len(" ".join(w[i:]))))
+        t = " ".join(w[:best]) + "\\N" + " ".join(w[best:])
+    longest = max(len(x) for x in t.split("\\N")); scale = min(100, int(100 * max_chars / max(longest, 1)))
+    return t, scale
+
 def ass(path, title, caps):
     tx, ty = 540, L["title_y"]; cx, cy = L["caption_xy"]
     path.write_text(f"""[Script Info]
@@ -21,8 +30,8 @@ Style: C,Inter,74,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0
 [Events]
 Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
 Dialogue: 1,0:00:00.00,9:00:00.00,T,,0,0,0,,{{\\pos({tx},{ty})\\fad(150,0)}}{esc(title.upper())}
-""" + "".join(f"Dialogue: 2,{ts(c['s'])},{ts(c['e'])},C,,0,0,0,,{{\\pos({cx},{cy})\\fscx80\\fscy80\\t(0,80,\\fscx100\\fscy100)"
-              f"{'\\\\c&H00B050F0&' if c.get('hl') else ''}}}{esc(c['t'].upper())}\n" for c in caps))
+""" + "".join(f"Dialogue: 2,{ts(c['s'])},{ts(c['e'])},C,,0,0,0,,{{\\pos({cx},{cy})\\fscx{int(sc*.8)}\\fscy{int(sc*.8)}\\t(0,80,\\fscx{sc}\\fscy{sc})"
+              f"{'\\\\c&H00B050F0&' if c.get('hl') else ''}}}{esc(t)}\n" for c in caps for t, sc in [fit(c['t'])]))
 
 def captions(words, per=3):
     out = []
@@ -44,7 +53,7 @@ def render(c, cp, out_root, n):
         xoff = max(0, min(xoff, cx0-gw)) if cam[0] > 960 else min(sw-gw, max(xoff, cx1))
     zoom = (f",zoompan=z='if(between(it,{P-0.2:.2f},{P+C['broll']['seconds']:.2f}),1.18,1)':d=1:"
             f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={gw}x{gh}:fps=30") if C["broll"]["enabled"] else ""
-    inp = ["-loop","1","-i",str(A/"background.png"), "-ss",str(c["start"]),"-t",str(dur),"-i",c["src"],
+    inp = ["-framerate","30","-loop","1","-i",str(A/"background.png"), "-ss",str(c["start"]),"-t",str(dur),"-i",c["src"],
            "-i",str(A/("frame_webcam.png" if cam else "frame_full.png")), "-i",str(A/"logo.png"), "-i",str(A/"mascot.png"),
            "-i",str(A/f"mask_{'game_cam' if cam else 'game_full'}.png"), "-i",str(A/"mask_cam.png"),
            "-i",str(R/"template/sfx/whoosh.wav"), "-i",str(R/"template/sfx/impact.wav")]
@@ -58,7 +67,7 @@ def render(c, cp, out_root, n):
     else: g += "[cs]nullsink;[v1]null[v2];"
     g += (f"[v2][2:v]overlay=0:0[v3];[v3][3:v]overlay=0:0[v4];[v4][4:v]overlay=0:0,ass={out/'subs.ass'},format=yuv420p[v];"
           f"[7:a]volume={C['sfx']['whoosh_db']}dB[w];[8:a]volume={C['sfx']['impact_db']}dB,adelay={int(P*1000)}|{int(P*1000)}[im];"
-          f"[1:a]aresample=48000[src];[src][w][im]amix=inputs=3:duration=first:normalize=0,alimiter=limit=0.95[a]")
+          f"[1:a]aresample=48000[src];[src][w][im]amix=inputs=3:duration=first:normalize=0,loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000[a]")
     subprocess.run(["ffmpeg","-y","-v","error",*inp,"-filter_complex",g,"-map","[v]","-map","[a]","-t",str(dur),
         "-c:v","libx264","-preset","veryfast","-crf","20","-c:a","aac","-b:a","160k","-movflags","+faststart",str(out/"video.mp4")], check=True)
     subprocess.run(["ffmpeg","-y","-v","error","-ss",str(P),"-i",str(out/"video.mp4"),"-frames:v","1","-vf","scale=360:-2",str(out/"thumb.jpg")])

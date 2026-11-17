@@ -1,6 +1,12 @@
 # Changelog — ClipeiAki
 Versionamento semântico (MAJOR.MINOR.PATCH). Versão atual em `VERSION`.
 
+## [0.3.1] — 2026-11-18 — Primeiro clip real
+- Legendas com quebra em 2 linhas + ajuste automático de tamanho (não cortam mais na borda).
+- Áudio normalizado para -14 LUFS / pico -1,5 dBFS (padrão TikTok/Reels/Shorts).
+- Saída fixa em 30 fps (antes herdava 25 fps da imagem de fundo).
+- Captação: YouTube e Reddit bloqueiam o IP do servidor (exigem cookies); clips da Twitch funcionam.
+
 ## [0.3.0] — 2026-11-17 — Esteira completa
 - `esteira.py`: um comando por etapa (scrap, live, add, cut, render, approve, post, status).
 - `capture/scrap.py`: clone gratuito do ViceScrap + ViceRepost (yt-dlp, ranking por outlier de views, `logs/seen.json` evita repetir).
