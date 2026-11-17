@@ -1,5 +1,8 @@
 # ClipeiAki — Plano de automação (GTA clips)
 
+> **Status (v0.3.0):** Fases A e B implementadas; Fase C (postagem automática) implementada, aguardando credenciais. Uso atual: `README.md` / `SETUP.md`. Histórico: `CHANGELOG.md`.
+> Mudanças vs. plano original: ViceScrap → `capture/scrap.py` (yt-dlp); Raea → render ffmpeg/libass; postagem via APIs oficiais (`publish/`).
+
 ## 1. Pipeline (1 comando, 1 chat, pouco token)
 ```
 ViceScrap (descoberta) → download → transcrição → tradução PT-BR → /viralizei (título, hook, descrição, hashtags)

@@ -1,0 +1,9 @@
+yt-dlp
+streamlink
+faster-whisper
+pyyaml
+requests
+numpy
+pillow
+google-api-python-client
+google-auth-oauthlib
