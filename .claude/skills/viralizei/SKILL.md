@@ -24,3 +24,14 @@ Entrada: `work/<id>/segments.json` (transcrição com timestamps). Saída: `work
 
 ## Fluxo
 `python pipeline/run.py prepare` → gerar edit.json de TODOS os vídeos num único passo → `python pipeline/run.py render` (roda `viralizei_check.py`; score <70 → reescrever hook/título e rodar de novo).
+
+## Modo LIVE (cortes da madrugada)
+Ao ver `BATCH_READY <dir>`: ler SÓ `<dir>/for_claude.txt` (texto compacto), escrever `<dir>/copy.json` de TODOS os cortes numa única escrita, rodar `python live/render_live.py <dir>` e entregar a lista (nº, título, thumb). Nunca abrir vídeo/transcrição inteira.
+```json
+{"<id>": {"title": "≤60 chars, reação + GTA", "description": "1ª linha gancho", "hashtags": ["#gtarp"],
+          "captions": [{"s": 9.5, "e": 11.2, "t": "PT-BR curto", "hl": true}]}}
+```
+- `captions` em segundos relativos ao início do corte (o pico = campo `peak`); `hl: true` = palavra-chave em rosa (máx 1–2 por corte).
+- Títulos de reação: "ELE NÃO ESPERAVA ISSO 😱", "O SUSTO QUE ELE LEVOU KKKK", "A REAÇÃO MAIS ABSURDA DO GTA RP".
+- B-roll: apenas o punch-in de zoom no pico (automático). SFX: whoosh no início (-15 dB) + impacto no pico (-6 dB); nada além disso (regras da skill `sound`).
+- Aprovação: o usuário responde os números → `python live/approve.py <batch> 1 3`.

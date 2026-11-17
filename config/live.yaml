@@ -1,0 +1,23 @@
+# Streamers acompanhados na madrugada. webcam: [x,y,w,h] da câmera no vídeo ORIGINAL (1920x1080) ou null.
+# Dica: rode `python live/cam_probe.py <canal>` para salvar um frame e medir a webcam.
+streamers:
+  - {name: exemplo_twitch, url: "https://twitch.tv/CANAL", lang: en, webcam: [1440, 760, 460, 300]}
+  - {name: exemplo_kick,   url: "https://kick.com/CANAL",  lang: pt, webcam: null}
+cycle_minutes: 30           # grava 30 min, entrega cortes, recomeça
+quiet_hours: ["00:00", "08:00"]   # madrugada (horário de Brasília)
+detect:
+  window_s: 0.5
+  peak_db_above_median: 14  # grito/susto = loudness muito acima da média da live
+  min_gap_s: 45             # 1 corte por momento
+  pre_s: 12                 # contexto antes do pico (começa 1 beat antes)
+  post_s: 6                 # termina logo após a reação
+  max_clips_per_cycle: 6
+layout:   # coordenadas do template (1080x1920)
+  cam:  [33, 301, 1014, 418]
+  game_cam:  [33, 749, 1014, 801]
+  game_full: [33, 301, 1014, 1249]
+  radius: 28
+  title_y: 190
+  caption_xy: [745, 1655]
+sfx: {impact_db: -6, whoosh_db: -15, max_per_clip: 2}
+broll: {enabled: true, max_per_clip: 1, seconds: 1.2}   # punch-in zoom no pico; broll de template/broll/ opcional

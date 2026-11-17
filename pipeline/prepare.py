@@ -17,7 +17,9 @@ def download(src, d):
 def transcribe(video, model):
     from faster_whisper import WhisperModel
     m = WhisperModel(model, compute_type="int8")
-    segs, info = m.transcribe(str(video), word_timestamps=True, vad_filter=True)
+    import numpy as np
+    raw = subprocess.run(["ffmpeg","-v","error","-i",str(video),"-ac","1","-ar","16000","-f","f32le","-"],capture_output=True,check=True).stdout
+    segs, info = m.transcribe(np.frombuffer(raw, np.float32), word_timestamps=True, vad_filter=True)
     return info.language, [{"start": s.start, "end": s.end, "text": s.text.strip(),
             "words": [{"w": w.word.strip(), "start": w.start, "end": w.end} for w in (s.words or [])]} for s in segs]
 

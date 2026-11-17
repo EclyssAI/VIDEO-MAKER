@@ -5,3 +5,4 @@ work/*
 output/*
 !output/.gitkeep
 __pycache__/
+config/secrets/
