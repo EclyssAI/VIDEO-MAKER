@@ -23,17 +23,27 @@ def transcribe(path, s, e, lang):
     segs, _ = m.transcribe(np.frombuffer(raw, np.float32), language=lang, word_timestamps=True, vad_filter=True)
     return [{"w": w.word.strip(), "s": round(w.start, 2), "e": round(w.end, 2)} for g in segs for w in (g.words or [])]
 
+def sources(batch):
+    """Metadados por arquivo: sources.json do lote (scrap/upload) ou config de streamers (lives)."""
+    meta = json.loads((batch/"sources.json").read_text()) if (batch/"sources.json").exists() else {}
+    for st in C["streamers"]: meta.setdefault(st["name"], {"lang": st["lang"], "webcam": st["webcam"], "credit": st["name"], "kind": "live"})
+    return meta
+
 def run(batch):
-    d = C["detect"]; clips = []
-    for st in C["streamers"]:
-        src = batch/f"{st['name']}.ts"
-        if not src.exists() or src.stat().st_size < 1e6: continue
+    d = C["detect"]; clips = []; meta = sources(batch)
+    for src in sorted([*batch.glob("*.ts"), *batch.glob("*.mp4")]):
+        if src.stat().st_size < 2e5: continue
+        m = {"lang": "en", "webcam": None, "credit": src.stem, "kind": "meme", **meta.get(src.stem, {})}
         db = loudness(src, d["window_s"]); dur = len(db)*d["window_s"]
-        for k, (i, strength) in enumerate(peaks(db, d)):
-            p = i*d["window_s"]; s = max(0, p-d["pre_s"]); e = min(dur, p+d["post_s"])
-            clips.append({"id": f"{st['name']}_{k}", "streamer": st["name"], "src": str(src), "lang": st["lang"],
-                "webcam": st["webcam"], "start": s, "end": e, "peak": p-s, "strength": round(strength, 1),
-                "words": transcribe(src, s, e, st["lang"])})
+        if dur <= 59:   # vídeo curto (repost): o vídeo inteiro é o corte
+            moments = [(int(np.argmax(db)), float(db.max()-np.median(db)))]; win = lambda p: (0, dur)
+        else:           # vídeo longo/live: vários cortes nos momentos relevantes
+            moments = peaks(db, d); win = lambda p: (max(0, p-d["pre_s"]), min(dur, p+d["post_s"]))
+        for k, (i, strength) in enumerate(moments):
+            p = i*d["window_s"]; s, e = win(p)
+            clips.append({"id": f"{src.stem}_{k}", "streamer": m["credit"], "src": str(src), "lang": m["lang"], "kind": m["kind"],
+                "webcam": m["webcam"], "start": s, "end": e, "peak": p-s, "strength": round(strength, 1),
+                "words": transcribe(src, s, e, m["lang"])})
     (batch/"pending.json").write_text(json.dumps(clips, ensure_ascii=False, indent=1))
     # versão compacta para o Claude (economia de tokens): só texto
     (batch/"for_claude.txt").write_text("\n".join(f"{c['id']} [{c['lang']}] pico={c['peak']:.1f}s +{c['strength']}dB: " + " | ".join(f"{g[0]['s']:.1f}-{g[-1]['e']:.1f} " + " ".join(w["w"] for w in g) for g in (c["words"][i:i+3] for i in range(0, len(c["words"]), 3))) for c in clips))

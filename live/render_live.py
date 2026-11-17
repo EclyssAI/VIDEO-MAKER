@@ -48,8 +48,8 @@ def render(c, cp, out_root, n):
            "-i",str(A/("frame_webcam.png" if cam else "frame_full.png")), "-i",str(A/"logo.png"), "-i",str(A/"mascot.png"),
            "-i",str(A/f"mask_{'game_cam' if cam else 'game_full'}.png"), "-i",str(A/"mask_cam.png"),
            "-i",str(R/"template/sfx/whoosh.wav"), "-i",str(R/"template/sfx/impact.wav")]
-    g = (f"[1:v]fps=30,split[gs][cs];"
-         f"[gs]scale=-2:{gh},crop={gw}:{gh}:{xoff:.0f}:0{zoom},format=yuva420p[g0];[g0][5:v]alphamerge[g];"
+    g = (f"[1:v]fps=30,split[gs][cs];" +
+         (f"[gs]scale=-2:{gh},crop={gw}:{gh}:{xoff:.0f}:0" if cam else f"[gs]scale={gw}:{gh}:force_original_aspect_ratio=increase,crop={gw}:{gh}") + f"{zoom},format=yuva420p[g0];[g0][5:v]alphamerge[g];"
          f"[0:v]format=yuva420p,trim=duration={dur}[bg];[bg][g]overlay={gx}:{gy}[v1];")
     if cam:
         x, y, w, h = cam; cx, cy, cw, ch = L["cam"]
@@ -72,7 +72,7 @@ def render(c, cp, out_root, n):
 if __name__ == "__main__":
     b = pathlib.Path(sys.argv[1]); clips = json.loads((b/"pending.json").read_text())
     copy = json.loads((b/"copy.json").read_text()) if (b/"copy.json").exists() else {}
-    out_root = R/"output/live"/b.name
+    out_root = R/"output"/b.name
     for n, c in enumerate(clips, 1):
         cp = copy.get(c["id"])
         if not cp:

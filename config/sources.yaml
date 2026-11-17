@@ -1,0 +1,9 @@
+# Clone do ViceScrap/ViceRepost: perfis gringos monitorados. O "outlier" = views / mediana do perfil.
+# Instagram exige cookies: exporte do navegador para config/secrets/cookies.txt (formato Netscape).
+profiles:
+  - {url: "https://www.tiktok.com/@PERFIL_GTA", lang: en, kind: meme}
+  - {url: "https://www.youtube.com/@CANAL_GTA/shorts", lang: en, kind: curiosidade}
+  - {url: "https://www.instagram.com/PERFIL_GTA/reels/", lang: en, kind: meme}
+scan_last: 40          # últimos N posts de cada perfil
+min_outlier: 3.0       # só pega o que fez 3x a mediana do perfil (viralizou)
+top_per_run: 10

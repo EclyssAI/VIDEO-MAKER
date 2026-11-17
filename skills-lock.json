@@ -106,6 +106,13 @@
       "skillPath": "skills/verification-before-completion/SKILL.md",
       "computedHash": "09b0e3a4689c1c38a3b8fc6ef57a1d4165aa33c0013d546dbde9dd348941a319"
     },
+    "viral-tiktok-hooks": {
+      "source": "gonzalochale/skills",
+      "commit": "fafaf15c16e9ffdd868d4592ea67684a3c2f324a",
+      "sourceType": "github",
+      "skillPath": "viral-tiktok-hooks/SKILL.md",
+      "computedHash": "658788d17efb4b3a4211de3e8b3d83cff0d4ef33cdaaad09c3d3c982bcb8f2af"
+    },
     "writing-plans": {
       "source": "obra/superpowers",
       "commit": "22f0b463e7a5e579904dd6211a520321035526f7",

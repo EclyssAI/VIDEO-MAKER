@@ -34,4 +34,16 @@ Ao ver `BATCH_READY <dir>`: ler SÓ `<dir>/for_claude.txt` (texto compacto), esc
 - `captions` em segundos relativos ao início do corte (o pico = campo `peak`); `hl: true` = palavra-chave em rosa (máx 1–2 por corte).
 - Títulos de reação: "ELE NÃO ESPERAVA ISSO 😱", "O SUSTO QUE ELE LEVOU KKKK", "A REAÇÃO MAIS ABSURDA DO GTA RP".
 - B-roll: apenas o punch-in de zoom no pico (automático). SFX: whoosh no início (-15 dB) + impacto no pico (-6 dB); nada além disso (regras da skill `sound`).
-- Aprovação: o usuário responde os números → `python live/approve.py <batch> 1 3`.
+- Aprovação: o usuário responde os números → `python esteira.py approve <lote> 1 3`.
+
+## Rotação anti-repetição (adaptado da skill viral-tiktok-hooks)
+Nunca repetir o mesmo ângulo em cortes seguidos do mesmo lote. Escolher 1 ângulo por corte:
+| Ângulo | Forma do título (PT-BR) |
+|---|---|
+| Curiosity Gap | "Ninguém fala desse detalhe do GTA 6" / "O que acontece se você…" |
+| Choque/Reação | "Ele NÃO esperava isso 😱" / "O susto que ele levou KKKK" |
+| Número específico | "3 segundos que mudaram a live inteira" |
+| Desafio/Prova | "Disseram que era impossível no GTA… olha isso" |
+| Identidade | "Todo jogador de GTA RP já passou por isso" |
+| Loop aberto | "Espera o final…" (só se o payoff estiver nos últimos 2 s) |
+Regras: loop aberto nos 2 primeiros segundos; especificidade > adjetivo; 1 emoji no máximo; CTA de comentário na descrição.

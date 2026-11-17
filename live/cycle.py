@@ -22,10 +22,12 @@ def process(batch):
 
 while True:
     c = yaml.safe_load((R/"config/live.yaml").read_text())
-    if not in_quiet_hours(c): time.sleep(300); continue
-    batch = R/"work/live"/datetime.datetime.now().strftime("%Y%m%d_%H%M"); batch.mkdir(parents=True, exist_ok=True)
+    if not in_quiet_hours(c):
+        subprocess.run([PY, str(R/"publish/scheduler.py"), "post"]); time.sleep(300); continue
+    batch = R/"work/batch"/datetime.datetime.now().strftime("%Y%m%d_%H%M"); batch.mkdir(parents=True, exist_ok=True)
     procs = [record(s, batch, c["cycle_minutes"]) for s in c["streamers"]]
     for p in procs: p.wait()
     if not any(f.stat().st_size > 1e6 for f in batch.glob("*.ts")):
         print(f"[offline] nenhuma live em {batch.name}", flush=True); time.sleep(120); continue
     threading.Thread(target=process, args=(batch,), daemon=True).start()
+    subprocess.run([PY, str(R/"publish/scheduler.py"), "post"])   # posta o que venceu na fila

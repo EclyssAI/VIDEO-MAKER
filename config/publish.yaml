@@ -1,0 +1,9 @@
+# Postagem gratuita via APIs oficiais. Credenciais em config/secrets/ (fora do git) — veja publish/README.md
+platforms:
+  youtube:   {enabled: true}    # Shorts  — secrets/youtube_token.json
+  instagram: {enabled: true}    # Reels   — secrets/instagram.json {ig_user_id, access_token}
+  tiktok:    {enabled: true, privacy: PUBLIC_TO_EVERYONE}  # secrets/tiktok.json; app não auditado só posta SELF_ONLY
+# horários de pico (Brasília); minutos "quebrados" de propósito
+slots: ["12:07", "15:23", "18:41", "21:13"]
+max_posts_per_day: 4
+first_comment: "Qual foi o momento mais absurdo que você já viu no GTA? 👇"
