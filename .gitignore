@@ -1,0 +1,7 @@
+input/raw/*
+!input/raw/.gitkeep
+work/*
+!work/.gitkeep
+output/*
+!output/.gitkeep
+__pycache__/
