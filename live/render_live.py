@@ -16,6 +16,20 @@ def fit(t, max_chars=12):
     longest = max(len(x) for x in t.split("\\N")); scale = min(100, int(100 * max_chars / max(longest, 1)))
     return t, scale
 
+def kara(caps, cx, cy):
+    """Legenda palavra-a-palavra: bloco inteiro visível, palavra falada em amarelo e maior (estilo clipadores US)."""
+    ev = []
+    for c in caps:
+        t, sc = fit(c["t"]); lines = [l.split() for l in t.split("\\N")]; n = sum(len(l) for l in lines) or 1
+        base = "\\c&H00B050F0&" if c.get("hl") else "\\c&H00FFFFFF&"; d = (c["e"] - c["s"]) / n; k = 0
+        for li, line in enumerate(lines):
+            for wi in range(len(line)):
+                txt = "\\N".join(" ".join((f"{{\\c&H0000D4FF&\\fscx112\\fscy112}}{esc(w)}{{{base}\\fscx100\\fscy100}}" if (a, b) == (li, wi) else esc(w))
+                                          for b, w in enumerate(l)) for a, l in enumerate(lines))
+                pop = f"\\fscx{int(sc*.8)}\\fscy{int(sc*.8)}\\t(0,80,\\fscx{sc}\\fscy{sc})" if k == 0 else f"\\fscx{sc}\\fscy{sc}"
+                ev.append(f"Dialogue: 2,{ts(c['s']+k*d)},{ts(c['s']+(k+1)*d)},C,,0,0,0,,{{\\pos({cx},{cy}){pop}{base}}}{txt}\n"); k += 1
+    return "".join(ev)
+
 def ass(path, title, caps):
     tx, ty = 540, L["title_y"]; cx, cy = L["caption_xy"]
     path.write_text(f"""[Script Info]
@@ -30,8 +44,7 @@ Style: C,Inter,74,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0
 [Events]
 Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
 Dialogue: 1,0:00:00.00,9:00:00.00,T,,0,0,0,,{{\\pos({tx},{ty})\\fad(150,0)}}{esc(title.upper())}
-""" + "".join(f"Dialogue: 2,{ts(c['s'])},{ts(c['e'])},C,,0,0,0,,{{\\pos({cx},{cy})\\fscx{int(sc*.8)}\\fscy{int(sc*.8)}\\t(0,80,\\fscx{sc}\\fscy{sc})"
-              f"{'\\\\c&H00B050F0&' if c.get('hl') else ''}}}{esc(t)}\n" for c in caps for t, sc in [fit(c['t'])]))
+""" + kara(caps, cx, cy))
 
 def captions(words, per=3):
     out = []
@@ -60,7 +73,7 @@ def render(c, cp, out_root, n):
            "-i",str(A/f"mask_{'game_cam' if cam else 'game_full'}.png"), "-i",str(A/"mask_cam.png"),
            "-i",str(R/"template/sfx/whoosh.wav"), "-i",str(R/"template/sfx/impact.wav")]
     g = (f"[1:v]fps=30,split[gs][cs];" +
-         (f"[gs]scale=-2:{gh},crop={gw}:{gh}:{xoff:.0f}:0" if (cam or c.get("focus") is not None) else f"[gs]scale={gw}:{gh}:force_original_aspect_ratio=increase,crop={gw}:{gh}") + f"{zoom},format=yuva420p[g0];[g0][5:v]alphamerge[g];"
+         (f"[gs]scale=-2:{gh},crop={gw}:{gh}:{xoff:.0f}:0" if (cam or c.get("focus") is not None) else f"[gs]scale={gw}:{gh}:force_original_aspect_ratio=increase,crop={gw}:{gh}") + (f",scale={int(gw*c['zoom'])}:{int(gh*c['zoom'])},crop={gw}:{gh}" if c.get("zoom", 1) > 1 else "") + f"{zoom},format=yuva420p[g0];[g0][5:v]alphamerge[g];"
          f"[0:v]format=yuva420p,trim=duration={dur}[bg];[bg][g]overlay={gx}:{gy}[v1];")
     if cam:
         x, y, w, h = cam; cx, cy, cw, ch = L["cam"]

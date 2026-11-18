@@ -1,6 +1,11 @@
 # Changelog — ClipeiAki
 Versionamento semântico (MAJOR.MINOR.PATCH). Versão atual em `VERSION`.
 
+## [0.5.0] — 2026-11-18 — Padrão dos clipadores grandes
+- Legenda karaokê (palavra falada em amarelo/maior).
+- `zoom` por trecho (ritmo visual), cold open no clímax, cortes secos de silêncio.
+- Regras na /viralizei: checagem de frame 0, silêncio, duração 61–90 s.
+
 ## [0.4.0] — 2026-11-18 — Compilações monetizáveis + regras do canal
 - Template: mascote encosta na barra inferior.
 - Legendas: apenas tradução da fala (sem comentários nossos).

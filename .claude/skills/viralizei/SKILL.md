@@ -57,3 +57,11 @@ Regras: loop aberto nos 2 primeiros segundos; especificidade > adjetivo; 1 emoji
    `{"_compilation": {"order": ["a","b"], "screen_title": "...", "title": "...", "description": "...", "hashtags": [...]}, "a": {"captions": [...]}}`
 4. Streamer fora do centro em layout sem webcam: usar `focus` (0–1, fração da largura) no pending.json.
 5. Mascote encosta na barra inferior (template/assets/mascot.png já ajustado).
+
+## Padrão dos clipadores grandes (v0.5 — aplicar em TODO vídeo)
+1. **Cold open:** os primeiros 1,5–2,5 s são o clímax (rosto + grito/frase mais forte), depois a história do começo. Nunca abrir com fala calma. O frame 0 precisa ter rosto ou ação.
+2. **Cortes secos:** remover silêncio > 0,7 s e trechos sem fala nem ação (navegar em menu, tela parada). Cada trecho vira uma entrada no pending.json.
+3. **Ritmo visual:** alternar `zoom` 1.0 / 1.10–1.18 entre trechos consecutivos do mesmo plano (simula troca de câmera). Trecho > 10 s sem corte = dividir.
+4. **Legenda karaokê:** automática (palavra falada em amarelo e maior; `hl` muda a cor-base do bloco para rosa).
+5. **Layout por trecho:** webcam pequena sobre conteúdo do jogo → `webcam` (layout dividido); webcam ocupando a tela → sem webcam + `focus` no rosto.
+6. **Checagem antes de entregar:** frame 0 com rosto/ação; nenhum silêncio > 1 s (`silencedetect`); duração 61–90 s; -14 LUFS; 30 fps.
