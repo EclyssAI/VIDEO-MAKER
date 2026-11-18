@@ -1,0 +1,10 @@
+data/
+work/*
+!work/.gitkeep
+output/*
+!output/.gitkeep
+input/raw/*
+.git
+.env
+config/secrets/
+**/__pycache__

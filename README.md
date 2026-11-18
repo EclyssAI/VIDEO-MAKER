@@ -14,3 +14,17 @@
 Pastas: `capture/` captação · `live/` detecção+render · `publish/` APIs + fila · `template/` assets do canal · `config/` · `work/` (temp) · `output/` (entregas) · `logs/` (fila, vistos).
 Instalação: `pip install yt-dlp streamlink faster-whisper pyyaml requests google-api-python-client google-auth-oauthlib` + ffmpeg; `python live/setup_assets.py`.
 Skills: viralizei, find-skills, superpowers, sound, viral-tiktok-hooks. MCP: REA (`.mcp.json`).
+
+---
+
+## VIDEO-MAKER Web (SaaS) — `web/`
+Versão para navegador que reaproveita o motor acima (`live/detect.py`, `live/render_live.py`, `capture/stack.py`) sem alterá-lo.
+Auditoria, matriz de funcionalidades, arquitetura e veredito: **`docs/AUDITORIA_WEB.md`**.
+
+```bash
+pip install -r requirements-web.txt            # + ffmpeg com libass e fonte Inter
+BETA_SIGNUP=1 COOKIE_SECURE=0 uvicorn web.app:app --port 8000   # interface + API
+BETA_SIGNUP=1 python -m web.worker                               # processamento (outro terminal)
+VM_TEST_MEDIA=/pasta/com/videos pytest -v web/tests/test_e2e.py  # testes ponta a ponta reais
+```
+Produção: `cp .env.example .env` e `docker compose up -d --build` (web + worker, volume `/data`). Limites dos planos em `config/plans.yaml`.

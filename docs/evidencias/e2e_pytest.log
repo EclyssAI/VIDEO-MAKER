@@ -1,0 +1,15 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.18, pytest-9.1.1, pluggy-1.6.0 -- /usr/local/bin/python3
+rootdir: /home/user/VIDEO-MAKER
+plugins: anyio-4.15.1
+collecting ... collected 7 items
+
+web/tests/test_e2e.py::test_fluxo_login_upload_processamento_preview_aprovacao_download PASSED [ 14%]
+web/tests/test_e2e.py::test_edicao_rerenderiza PASSED                    [ 28%]
+web/tests/test_e2e.py::test_dois_clientes_isolados PASSED                [ 42%]
+web/tests/test_e2e.py::test_erros_e_seguranca PASSED                     [ 57%]
+web/tests/test_e2e.py::test_limites_do_plano PASSED                      [ 71%]
+web/tests/test_e2e.py::test_worker_morre_no_meio_e_job_e_retomado PASSED [ 85%]
+web/tests/test_e2e.py::test_cakto_webhooks PASSED                        [100%]
+
+======================== 7 passed in 335.96s (0:05:35) =========================

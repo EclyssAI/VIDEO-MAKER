@@ -1,0 +1,17 @@
+# Um host (VM) com volume persistente. Web e worker compartilham /data (SQLite + vídeos).
+services:
+  web:
+    build: .
+    ports: ["8000:8000"]
+    env_file: .env
+    volumes: [vmdata:/data]
+    restart: unless-stopped
+  worker:
+    build: .
+    command: ["python", "-m", "web.worker"]
+    env_file: .env
+    volumes: [vmdata:/data]
+    restart: unless-stopped
+    stop_grace_period: 60s
+volumes:
+  vmdata:

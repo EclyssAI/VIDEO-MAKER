@@ -6,3 +6,5 @@ output/*
 !output/.gitkeep
 __pycache__/
 config/secrets/
+/data/
+.env

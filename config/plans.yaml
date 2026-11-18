@@ -1,0 +1,30 @@
+# Limites por plano do VIDEO-MAKER Web (SaaS). Valores iniciais — confirmar com a landing antes do lançamento.
+# minutes_per_month = minutos de vídeo enviados (soma das durações) no mês corrente.
+plans:
+  beta:            # acesso de demonstração (sem assinatura) — habilitado por BETA_SIGNUP=1
+    label: "Beta"
+    price_brl: 0
+    projects_per_month: 3
+    minutes_per_month: 30
+    max_upload_mb: 500
+    max_video_minutes: 15
+    clips_per_project: 3
+    premium_assets: false
+  creator:
+    label: "Creator"
+    price_brl: 49.90
+    projects_per_month: 30
+    minutes_per_month: 600
+    max_upload_mb: 2048
+    max_video_minutes: 90
+    clips_per_project: 6
+    premium_assets: false
+  studio:
+    label: "Creator Studio"
+    price_brl: 69.90
+    projects_per_month: 60
+    minutes_per_month: 1500
+    max_upload_mb: 4096
+    max_video_minutes: 180
+    clips_per_project: 10
+    premium_assets: true   # SFX (whoosh/impacto), punch-in zoom no pico, destaque de palavra-chave
