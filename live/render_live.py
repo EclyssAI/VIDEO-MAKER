@@ -106,7 +106,10 @@ def compile_(clips, comp, out_root):
     (tmp/"list.txt").write_text("".join(f"file '{p}'\n" for p in parts))
     subprocess.run(["ffmpeg","-y","-v","error","-f","concat","-safe","0","-i",str(tmp/"list.txt"),"-c:v","libx264","-preset","veryfast","-crf","20",
         "-c:a","aac","-b:a","160k","-af","loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000","-movflags","+faststart",str(out/"video.mp4")], check=True)
-    for f in ("descricao.txt", "meta.json"): (out/f).write_text((parts[0].parent/f).read_text())
+    credits = ", ".join(dict.fromkeys(next(x for x in clips if x["id"] == cid)["streamer"] for cid in comp["order"]))
+    for f in ("descricao.txt", "meta.json"):
+        t = (parts[0].parent/f).read_text(); first = next(x for x in clips if x["id"] == comp["order"][0])["streamer"]
+        (out/f).write_text(t.replace(f"Créditos: {first}", f"Créditos: {credits}").replace(json.dumps(first, ensure_ascii=False)[1:-1], credits, 1) if f == "meta.json" else t.replace(f"Créditos: {first}", f"Créditos: {credits}"))
     subprocess.run(["ffmpeg","-y","-v","error","-ss","3","-i",str(out/"video.mp4"),"-frames:v","1","-vf","scale=360:-2",str(out/"thumb.jpg")])
     import shutil; shutil.rmtree(tmp); return out
 
