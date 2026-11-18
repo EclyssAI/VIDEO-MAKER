@@ -65,3 +65,11 @@ Regras: loop aberto nos 2 primeiros segundos; especificidade > adjetivo; 1 emoji
 4. **Legenda karaokê:** automática (palavra falada em amarelo e maior; `hl` muda a cor-base do bloco para rosa).
 5. **Layout por trecho:** webcam pequena sobre conteúdo do jogo → `webcam` (layout dividido); webcam ocupando a tela → sem webcam + `focus` no rosto.
 6. **Checagem antes de entregar:** frame 0 com rosto/ação; nenhum silêncio > 1 s (`silencedetect`); duração 61–90 s; -14 LUFS; 30 fps.
+
+## Stack em lote (v0.6) — N vídeos de uma vez
+1. `python capture/harvest.py` (clips de GTA dos últimos 7 dias, ~40 streamers) → `work/stack/clips.jsonl`
+2. `python capture/stack.py plan 20` → grupos por streamer (~140 s brutos cada)
+3. `python capture/stack.py prepare` → baixa (cache em work/stack/dl), detecta webcam/rosto (YuNet), transcreve, corta silêncio, cold open, zoom alternado, remove trechos com fala repetida → `work/stack/for_claude.txt`
+4. Claude escreve `work/stack/pt.txt` (formato compacto: `## NN|tela|título|desc / linha2|#tags`, `DROP id`, `id#n|TRADUÇÃO`, `!` = destaque rosa). DROP obrigatório: ofensas raciais/slurs e trechos duplicados.
+5. `python capture/stack.py apply` → `work/stack/render_all.sh` → `python capture/deliver.py output/stack_*/01_*`
+Regras: nunca reutilizar clip já postado; legenda gravada da live é cortada (`trim_bottom` 0.12); 61–90 s (abaixo disso = só Shorts/Reels).

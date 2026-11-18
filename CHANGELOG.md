@@ -1,6 +1,11 @@
 # Changelog — ClipeiAki
 Versionamento semântico (MAJOR.MINOR.PATCH). Versão atual em `VERSION`.
 
+## [0.6.0] — 2026-11-18 — Produção em lote (stack)
+- `capture/harvest.py`, `capture/stack.py` (plan/prepare/apply), `capture/deliver.py`.
+- Detecção automática de webcam/rosto com YuNet (OpenCV), modelo em template/models/.
+- Remoção de trechos com fala repetida, `trim_bottom` para cortar legenda gravada da live, legendas sem sobreposição.
+
 ## [0.5.0] — 2026-11-18 — Padrão dos clipadores grandes
 - Legenda karaokê (palavra falada em amarelo/maior).
 - `zoom` por trecho (ritmo visual), cold open no clímax, cortes secos de silêncio.

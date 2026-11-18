@@ -17,6 +17,8 @@ def fit(t, max_chars=12):
     return t, scale
 
 def kara(caps, cx, cy):
+    caps = sorted(caps, key=lambda c: c["s"])
+    for a, b in zip(caps, caps[1:]): a["e"] = min(a["e"], b["s"])   # sem sobreposição
     """Legenda palavra-a-palavra: bloco inteiro visível, palavra falada em amarelo e maior (estilo clipadores US)."""
     ev = []
     for c in caps:
@@ -59,12 +61,13 @@ def render(c, cp, out_root, n):
     gx, gy, gw, gh = L["game_cam" if cam else "game_full"]
     out = out_root/f"{n:02d}_{slug(cp['title'])}"; out.mkdir(parents=True, exist_ok=True)
     caps = cp.get("captions") or captions(c["words"]); ass(out/"subs.ass", cp.get("screen_title", cp["title"]), caps)
-    sw = gh*16/9  # largura do jogo escalado (fonte 16:9)
+    tb = c.get("trim_bottom", L.get("trim_bottom", 0)); eh = int(gh/(1-tb))  # corta legenda/HUD gravados no rodapé da live
+    sw = eh*16/9  # largura do jogo escalado (fonte 16:9)
     xoff = (sw-gw)/2
     if c.get("focus") is not None and not cam:  # centraliza o streamer/ação (fração da largura da fonte)
         xoff = max(0, min(sw-gw, c["focus"]*sw - gw/2))
     if cam:  # afasta o recorte do jogo da webcam
-        k = gh/1080; cx0, cx1 = cam[0]*k, (cam[0]+cam[2])*k
+        k = eh/1080; cx0, cx1 = cam[0]*k, (cam[0]+cam[2])*k
         xoff = max(0, min(xoff, cx0-gw)) if cam[0] > 960 else min(sw-gw, max(xoff, cx1))
     zoom = (f",zoompan=z='if(between(it,{P-0.2:.2f},{P+C['broll']['seconds']:.2f}),1.18,1)':d=1:"
             f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={gw}x{gh}:fps=30") if C["broll"]["enabled"] else ""
@@ -73,7 +76,7 @@ def render(c, cp, out_root, n):
            "-i",str(A/f"mask_{'game_cam' if cam else 'game_full'}.png"), "-i",str(A/"mask_cam.png"),
            "-i",str(R/"template/sfx/whoosh.wav"), "-i",str(R/"template/sfx/impact.wav")]
     g = (f"[1:v]fps=30,split[gs][cs];" +
-         (f"[gs]scale=-2:{gh},crop={gw}:{gh}:{xoff:.0f}:0" if (cam or c.get("focus") is not None) else f"[gs]scale={gw}:{gh}:force_original_aspect_ratio=increase,crop={gw}:{gh}") + (f",scale={int(gw*c['zoom'])}:{int(gh*c['zoom'])},crop={gw}:{gh}" if c.get("zoom", 1) > 1 else "") + f"{zoom},format=yuva420p[g0];[g0][5:v]alphamerge[g];"
+         (f"[gs]scale=-2:{eh},crop={gw}:{gh}:{xoff:.0f}:0" if (cam or c.get("focus") is not None) else f"[gs]scale={gw}:{eh}:force_original_aspect_ratio=increase,crop={gw}:{gh}:(iw-ow)/2:0") + (f",scale={int(gw*c['zoom'])}:{int(gh*c['zoom'])},crop={gw}:{gh}" if c.get("zoom", 1) > 1 else "") + f"{zoom},format=yuva420p[g0];[g0][5:v]alphamerge[g];"
          f"[0:v]format=yuva420p,trim=duration={dur}[bg];[bg][g]overlay={gx}:{gy}[v1];")
     if cam:
         x, y, w, h = cam; cx, cy, cw, ch = L["cam"]
