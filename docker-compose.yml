@@ -1,14 +1,22 @@
-# Um host (VM) com volume persistente. Web e worker compartilham /data (SQLite + vídeos).
+# Um host (VM) com volume persistente. Web, worker e live agent compartilham /data (SQLite + vídeos).
+# Coloque um proxy HTTPS na frente e defina FORWARDED_ALLOW_IPS com o IP dele; não exponha a porta 8000 direto.
 services:
   web:
     build: .
-    ports: ["8000:8000"]
+    ports: ["127.0.0.1:8000:8000"]   # só o proxy local acessa
     env_file: .env
     volumes: [vmdata:/data]
     restart: unless-stopped
   worker:
     build: .
     command: ["python", "-m", "web.worker"]
+    env_file: .env
+    volumes: [vmdata:/data]
+    restart: unless-stopped
+    stop_grace_period: 60s
+  live:
+    build: .
+    command: ["python", "-m", "web.live.agent"]   # gravação contínua de lives + análise Claude (processo longo)
     env_file: .env
     volumes: [vmdata:/data]
     restart: unless-stopped

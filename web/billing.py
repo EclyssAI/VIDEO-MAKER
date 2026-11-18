@@ -47,7 +47,8 @@ def _set(c, email, plan, status, until):
     t = db.now()
     c.execute("INSERT INTO entitlements(email,plan,status,until,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(email) DO UPDATE SET "
               "plan=excluded.plan,status=excluded.status,until=excluded.until,updated_at=excluded.updated_at", (email, plan, status, until, t))
-    c.execute("UPDATE users SET plan=?, plan_status=?, plan_until=? WHERE email=?", (plan, status, until, email))
+    # só contas com e-mail verificado recebem o plano: sem isso, quem cadastrasse o e-mail do comprador antes levaria a assinatura
+    c.execute("UPDATE users SET plan=?, plan_status=?, plan_until=? WHERE email=? AND email_verified=1", (plan, status, until, email))
 
 
 def handle(c, body: dict):
@@ -80,4 +81,5 @@ def handle(c, body: dict):
 def apply_pending(c, email):
     """Ao criar conta, aplica uma assinatura comprada antes do cadastro."""
     e = c.execute("SELECT * FROM entitlements WHERE email=?", (email,)).fetchone()
-    if e: c.execute("UPDATE users SET plan=?, plan_status=?, plan_until=? WHERE email=?", (e["plan"], e["status"], e["until"], email))
+    if e: c.execute("UPDATE users SET plan=?, plan_status=?, plan_until=? WHERE email=? AND email_verified=1",
+                    (e["plan"], e["status"], e["until"], email))

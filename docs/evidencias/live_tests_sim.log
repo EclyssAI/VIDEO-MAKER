@@ -1,0 +1,14 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.18, pytest-9.1.1, pluggy-1.6.0 -- /usr/local/bin/python3
+rootdir: /home/user/VIDEO-MAKER
+plugins: anyio-4.15.1
+collecting ... collected 6 items
+
+web/tests/test_live.py::test_sim_monitoramento_analise_frames_e_corte_durante_gravacao PASSED [ 16%]
+web/tests/test_live.py::test_sim_falha_do_claude_e_reconexao_do_stream PASSED [ 33%]
+web/tests/test_live.py::test_sim_reinicio_do_agente_retoma_sessao PASSED [ 50%]
+web/tests/test_live.py::test_sim_orcamento_reduz_frames_e_encerra PASSED [ 66%]
+web/tests/test_live.py::test_isolamento_entre_usuarios_e_tokens PASSED   [ 83%]
+web/tests/test_live.py::test_mcp_ferramentas_controlam_o_agente PASSED   [100%]
+
+======================== 6 passed in 282.35s (0:04:42) =========================

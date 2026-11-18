@@ -9,7 +9,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, pw_hash TEXT NOT NULL, name TEXT DEFAULT '',
   handle TEXT DEFAULT '', plan TEXT NOT NULL DEFAULT 'none', plan_status TEXT NOT NULL DEFAULT 'none',
-  plan_until REAL DEFAULT 0, created_at REAL NOT NULL);
+  plan_until REAL DEFAULT 0, email_verified INTEGER NOT NULL DEFAULT 0, created_at REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS sessions (
   token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   created_at REAL NOT NULL, expires_at REAL NOT NULL);
@@ -21,7 +21,7 @@ CREATE INDEX IF NOT EXISTS ix_projects_user ON projects(user_id, created_at);
 CREATE TABLE IF NOT EXISTS clips (
   id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE, idx INTEGER NOT NULL,
-  start REAL, end REAL, peak REAL, strength REAL, data TEXT NOT NULL, copy TEXT NOT NULL,
+  start REAL, "end" REAL, peak REAL, strength REAL, data TEXT NOT NULL, copy TEXT NOT NULL,
   status TEXT NOT NULL, video_path TEXT DEFAULT '', thumb_path TEXT DEFAULT '', error TEXT DEFAULT '',
   created_at REAL NOT NULL, updated_at REAL NOT NULL);
 CREATE INDEX IF NOT EXISTS ix_clips_user ON clips(user_id, status);
@@ -55,7 +55,8 @@ def connect():
 
 
 def init():
-    with contextlib.closing(connect()) as c: c.executescript(SCHEMA)
+    from .live.store import SCHEMA as LIVE_SCHEMA
+    with contextlib.closing(connect()) as c: c.executescript(SCHEMA + LIVE_SCHEMA)
 
 
 @contextlib.contextmanager

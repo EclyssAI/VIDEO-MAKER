@@ -1,12 +1,13 @@
 """Autenticação: senha com scrypt (stdlib), sessão opaca em cookie HttpOnly (hash SHA-256 no banco),
 limite de tentativas de login em memória por IP+e-mail."""
-import hashlib, hmac, os, secrets, time, collections, re
+import hashlib, hmac, os, secrets, time, re
 from . import db
 
 SESSION_DAYS = 30
 COOKIE = "vm_session"
 EMAIL_RE = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,255}\.[^@\s]{2,}$")
-_fails = collections.defaultdict(list)
+_fails = {}
+DUMMY_HASH = "scrypt$00$00"  # tempo de verificação parecido para e-mails inexistentes (dificulta enumeração)
 
 
 def hash_pw(pw):
@@ -45,11 +46,15 @@ def destroy_session(c, token):
 
 
 def throttled(key, limit=8, window=900):
-    t = time.time(); _fails[key] = [x for x in _fails[key] if t - x < window]
-    return len(_fails[key]) >= limit
+    t = time.time(); v = [x for x in _fails.get(key, []) if t - x < window]
+    if v: _fails[key] = v
+    else: _fails.pop(key, None)
+    if len(_fails) > 50000:  # evita crescimento sem limite do dicionário
+        for k in list(_fails)[:25000]: _fails.pop(k, None)
+    return len(v) >= limit
 
 
-def record_fail(key): _fails[key].append(time.time())
+def record_fail(key): _fails.setdefault(key, []).append(time.time())
 
 
 def valid_password(pw): return isinstance(pw, str) and 8 <= len(pw) <= 200

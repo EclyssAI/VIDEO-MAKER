@@ -15,6 +15,13 @@
       "skillPath": "skills/brainstorming/SKILL.md",
       "computedHash": "a7424777b7f81e3eb9b4556d29fe233553736d8255780d3e1feea190fef61fef"
     },
+    "deploy-to-vercel": {
+      "source": "vercel-labs/agent-skills",
+      "commit": "1a2c79d4e6c4a2283dc2c614b6538cbe1ed5ca62",
+      "sourceType": "github",
+      "skillPath": "skills/deploy-to-vercel/SKILL.md",
+      "computedHash": "66b99dfa063b1c405155e9bffd99c04ca3e312e81b168d540b757bb194b7400a"
+    },
     "diagnosing-superpowers": {
       "source": "obra/superpowers",
       "commit": "22f0b463e7a5e579904dd6211a520321035526f7",
@@ -36,6 +43,20 @@
       "skillPath": "skills/executing-plans/SKILL.md",
       "computedHash": "58b364f6e3f64602c7cfd0b34ceaad9de95d41fe7e4b46b274843ba19fc01ccc"
     },
+    "fastapi": {
+      "source": "fastapi/fastapi",
+      "commit": "05e6df7e906c3decba377c37548019973f40bf15",
+      "sourceType": "github",
+      "skillPath": "fastapi/.agents/skills/fastapi/SKILL.md",
+      "computedHash": "141f0146e357365d518029ccc74e5b0a256f9a352573c65856780995d1bea52c"
+    },
+    "ffmpeg": {
+      "source": "digitalsamba/claude-code-video-toolkit",
+      "commit": "a89a32078bf1bad0107a43c228de38ced2baee89",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/ffmpeg/SKILL.md",
+      "computedHash": "ff8e85c81bac9a0bc655b94893f06e60e34c42f3faa98ee60e2cdd51a0215013"
+    },
     "find-skills": {
       "source": "vercel-labs/skills",
       "commit": "57217cf86ba38148a57af9e90d14a4c049558330",
@@ -56,6 +77,13 @@
       "sourceType": "github",
       "skillPath": "skills/hook-writer-sms/SKILL.md",
       "computedHash": "7ed4eaacbc2d8875e4b94de7983a85fe6eebb37e5beaca05d75c06c17d58e780"
+    },
+    "python-mcp-server-generator": {
+      "source": "github/awesome-copilot",
+      "commit": "a255a193d1318e5a9ca3e9e575897f9a7845c099",
+      "sourceType": "github",
+      "skillPath": "skills/python-mcp-server-generator/SKILL.md",
+      "computedHash": "d8c68d4be087606a25c589700f2a8ce024126b1cf0ba4339fd389409682819ac"
     },
     "receiving-code-review": {
       "source": "obra/superpowers",

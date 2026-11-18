@@ -1,5 +1,5 @@
 "use strict";
-/* VIDEO-MAKER Web — SPA sem dependências. Todo dado do usuário passa por esc() antes de ir para o HTML. */
+/* ClipeiAki (ex-VIDEO-MAKER) Web — SPA sem dependências. Todo dado do usuário passa por esc() antes de ir para o HTML. */
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -13,12 +13,14 @@ const I = {
   edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/>', trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
   retry: '<path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/>', copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/>',
   out: '<path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M10 17l5-5-5-5M15 12H3"/>', x: '<path d="M6 6l12 12M18 6 6 18"/>',
-  back: '<path d="M15 18l-6-6 6-6"/>', undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>',
+  back: '<path d="M15 18l-6-6 6-6"/>', radio: '<circle cx="12" cy="12" r="2"/><path d="M16.2 7.8a6 6 0 0 1 0 8.4M7.8 16.2a6 6 0 0 1 0-8.4M19 5a10 10 0 0 1 0 14M5 19A10 10 0 0 1 5 5"/>',
+  stop: '<rect x="6" y="6" width="12" height="12" rx="2"/>', play: '<path d="M7 5l12 7-12 7z"/>', scissors: '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12"/>',
+  key: '<circle cx="8" cy="15" r="4"/><path d="m10.8 12.2 9.2-9.2M17 6l3 3M14 9l2 2"/>', undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>',
 };
 const icon = (n) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${I[n]}</svg>`;
 const S = { me: null, timer: null };
 const LANG = { auto: "Detectar automaticamente", pt: "Português", en: "Inglês", es: "Espanhol" };
-const PSTATUS = { uploading: ["Enviando", "run"], queued: ["Na fila", "run"], processing: ["Analisando", "run"], rendering: ["Renderizando", "run"], done: ["Pronto", "ok"], failed: ["Falhou", "bad"] };
+const PSTATUS = { live: ["Ao vivo", "run"], uploading: ["Enviando", "run"], queued: ["Na fila", "run"], processing: ["Analisando", "run"], rendering: ["Renderizando", "run"], done: ["Pronto", "ok"], failed: ["Falhou", "bad"] };
 const CSTATUS = { queued: ["Na fila", "run"], rendering: ["Renderizando", "run"], ready: ["Para revisar", "warn"], approved: ["Aprovado", "ok"], discarded: ["Descartado", ""], failed: ["Falhou", "bad"] };
 const chip = (map, s) => { const [t, k] = map[s] || [s, ""]; return `<span class="chip ${k}">${esc(t)}</span>`; };
 const fmtDur = (s) => { s = Math.round(s || 0); const m = Math.floor(s / 60); return m >= 60 ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}` : `${m}:${String(s % 60).padStart(2, "0")}`; };
@@ -49,19 +51,19 @@ window.addEventListener("popstate", route);
 /* ---------------- shell ---------------- */
 function shell(active, content) {
   const me = S.me, L = me.limits;
-  const nav = [["/", "home", "Painel"], ["/biblioteca", "lib", "Biblioteca"], ["/conta", "user", "Conta e plano"]];
+  const nav = [["/", "home", "Painel"], ["/live", "radio", "Claude Live Monitor"], ["/biblioteca", "lib", "Biblioteca"], ["/conta", "user", "Conta e plano"]];
   const planMini = L ? `<div class="plan-mini"><div class="row"><strong>${esc(me.plan_label)}</strong><span class="spacer"></span><span class="muted small">${me.usage.projects}/${L.projects_per_month}</span></div>
       <progress max="${L.projects_per_month}" value="${me.usage.projects}" aria-label="Projetos usados no mês"></progress>
       <span class="muted small">projetos neste mês</span></div>`
     : `<div class="plan-mini"><strong>Sem plano ativo</strong><a href="/conta" data-link class="small">Ver planos</a></div>`;
   return `<div class="shell"><aside class="side" aria-label="Navegação">
-      <div class="brand"><img src="/static/icon.svg" alt="">VIDEO-MAKER</div>
+      <div class="brand"><img src="/static/icon.svg" alt="">ClipeiAki</div>
       <nav class="nav"><a href="/novo" data-link class="cta">${icon("plus")}Novo projeto</a>
         ${nav.map(([h, i, t]) => `<a href="${h}" data-link ${active === h ? 'aria-current="page"' : ""}>${icon(i)}${t}</a>`).join("")}</nav>
       ${planMini}</aside>
     <main id="main" tabindex="-1">${content}</main>
     <nav class="tabbar" aria-label="Navegação">
-      ${[["/", "home", "Painel"], ["/novo", "plus", "Novo"], ["/biblioteca", "lib", "Biblioteca"], ["/conta", "user", "Conta"]]
+      ${[["/", "home", "Painel"], ["/novo", "plus", "Novo"], ["/live", "radio", "Live"], ["/biblioteca", "lib", "Biblioteca"], ["/conta", "user", "Conta"]]
         .map(([h, i, t]) => `<a href="${h}" data-link ${active === h ? 'aria-current="page"' : ""}>${icon(i)}${t}</a>`).join("")}</nav></div>`;
 }
 function render(html) { $("#app").innerHTML = html; }
@@ -69,7 +71,7 @@ function poll(fn, ms = 3000) { clearTimeout(S.timer); S.timer = setTimeout(fn, m
 
 /* ---------------- rotas ---------------- */
 async function route() {
-  clearTimeout(S.timer);
+  clearTimeout(S.timer); if (S.es) { S.es.close(); S.es = null; }
   const p = location.pathname;
   if (!S.me) { try { S.me = await api("/api/me", { quiet: true }); } catch { S.me = null; } }
   if (!S.me) return p === "/criar-conta" ? authView("signup") : authView("login");
@@ -80,12 +82,14 @@ async function route() {
     if (p.startsWith("/projeto/")) return await studio(p.split("/")[2]);
     if (p === "/biblioteca") return await library();
     if (p === "/conta") return await account();
+    if (p === "/live") return await liveHome();
+    if (p.startsWith("/live/")) return await liveSession(p.split("/")[2]);
     render(shell("", `<div class="empty"><h2>Página não encontrada</h2><a class="btn" href="/" data-link>Voltar ao painel</a></div>`));
   } catch (e) { if (S.me) render(shell("", `<div class="empty"><h2>Não foi possível carregar</h2><p>${esc(e.message)}</p><a class="btn" href="/" data-link>Voltar</a></div>`)); }
 }
 
 function authView(mode) {
-  render(`<div class="auth"><section class="auth-hero"><div class="brand"><img src="/static/icon.svg" alt="">VIDEO-MAKER <span class="muted">· Eclyss</span></div>
+  render(`<div class="auth"><section class="auth-hero"><div class="brand"><img src="/static/icon.svg" alt="">ClipeiAki <span class="muted">· Eclyss</span></div>
       <h1>Seus vídeos longos viram cortes prontos para postar.</h1>
       <p class="lead">Envie uma live, VOD ou gravação. Encontramos os momentos fortes, legendamos e montamos o vídeo vertical para TikTok, Reels e Shorts.</p>
       <ol class="steps"><li><b>1</b>Envie o vídeo</li><li><b>2</b>Revise os cortes sugeridos</li><li><b>3</b>Aprove e baixe em 1080×1920</li></ol></section>
@@ -112,7 +116,7 @@ function authView(mode) {
 }
 
 async function dashboard() {
-  const [me, list] = await Promise.all([api("/api/me"), api("/api/projects")]); S.me = me; const L = me.limits;
+  const [me, list, lives] = await Promise.all([api("/api/me"), api("/api/projects"), api("/api/live/sessions").catch(() => [])]); S.me = me; const L = me.limits;
   const first = (me.name || "").split(" ")[0];
   const meters = L ? `<div class="meters">
       <div class="meter"><span class="muted">Projetos no mês</span><div class="num">${me.usage.projects} <span>de ${L.projects_per_month}</span></div><progress max="${L.projects_per_month}" value="${me.usage.projects}"></progress></div>
@@ -128,7 +132,7 @@ async function dashboard() {
       ${run && p.status === "processing" && p.job ? `<progress max="100" value="${p.job.progress}" aria-label="Progresso"></progress>` : ""}</div>${chip(PSTATUS, p.status)}</a>`;
   }).join("");
   render(shell("/", `<div class="page-head"><div><h1>${first ? `Olá, ${esc(first)}` : "Seu painel"}</h1><p>Acompanhe seus projetos e revise os cortes prontos.</p></div>
-      <a class="btn primary lg" href="/novo" data-link>${icon("plus")}Novo projeto</a></div>${meters}
+      <a class="btn primary lg" href="/novo" data-link>${icon("plus")}Novo projeto</a></div>${meters}${liveDashCard(lives, me)}
     <h2 class="sr">Projetos</h2>
     ${list.length ? `<div class="projects">${rows}</div>` : `<div class="empty"><h2>Nenhum projeto ainda</h2><p>Envie uma live, VOD ou gravação e receba os melhores momentos em vídeo vertical, já legendados.</p><a class="btn primary lg" href="/novo" data-link>${icon("upload")}Enviar primeiro vídeo</a></div>`}`));
   if (list.some((p) => ["queued", "processing", "rendering"].includes(p.status))) poll(() => location.pathname === "/" && dashboard());
@@ -256,7 +260,7 @@ function editor(c, pid) {
     $("#esave").disabled = true;
     const body = { screen_title: $("#e1").value, title: $("#e2").value, description: $("#e3").value, hashtags: $("#e4").value };
     if (caps.length) body.captions = $$("[data-cap]", wrap).map((x) => x.value);
-    try { await api(`/api/clips/${c.id}`, { method: "PATCH", json: body }); close(); toast("Salvo. Renderizando a nova versão…"); studio(pid); }
+    try { await api(`/api/clips/${c.id}`, { method: "PATCH", json: body }); close(); toast("Salvo. Renderizando a nova versão…"); if (pid) studio(pid); }
     catch (e) { toast(e.message, true); $("#esave").disabled = false; }
   };
 }
@@ -296,9 +300,11 @@ async function account() {
       ${me.plan_until > 0 && me.plan !== "beta" ? `<p class="muted">Válido até ${new Date(me.plan_until * 1000).toLocaleDateString("pt-BR")}</p>` : ""}
       <p class="muted">${me.usage.projects} de ${me.limits.projects_per_month} projetos e ${Math.round(me.usage.minutes)} de ${me.limits.minutes_per_month} minutos usados neste mês.</p>` : `<p class="muted">Nenhum plano ativo.</p>`}
       ${me.claude_copy ? "" : `<p class="muted small">Tradução e títulos automáticos estão desativados neste ambiente: os cortes saem com título padrão editável e legenda no idioma original.</p>`}</div></div>
+    <section class="panel stack tokens" id="tokens" aria-labelledby="tkh"></section>
     <h2 class="section-title">Planos</h2><div class="plans">${Object.entries(b.plans).map(([k, L]) => planCard(k, L)).join("")}</div>`));
   $("#pf").onsubmit = async (e) => { e.preventDefault(); try { S.me = await api("/api/me", { method: "PATCH", json: { name: $("#n").value, handle: $("#h").value } }); $("#h").value = S.me.handle; toast("Perfil salvo."); } catch (err) { toast(err.message, true); } };
+  renderTokens(me);
   $("#logout").onclick = async () => { await api("/api/auth/logout", { method: "POST" }).catch(() => {}); S.me = null; go("/entrar"); };
 }
 
-route();
+document.addEventListener("DOMContentLoaded", route);

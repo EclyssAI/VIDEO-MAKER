@@ -17,7 +17,7 @@ Skills: viralizei, find-skills, superpowers, sound, viral-tiktok-hooks. MCP: REA
 
 ---
 
-## VIDEO-MAKER Web (SaaS) — `web/`
+## ClipeiAki Web (SaaS, ex-VIDEO-MAKER) — `web/`
 Versão para navegador que reaproveita o motor acima (`live/detect.py`, `live/render_live.py`, `capture/stack.py`) sem alterá-lo.
 Auditoria, matriz de funcionalidades, arquitetura e veredito: **`docs/AUDITORIA_WEB.md`**.
 
@@ -28,3 +28,12 @@ BETA_SIGNUP=1 python -m web.worker                               # processamento
 VM_TEST_MEDIA=/pasta/com/videos pytest -v web/tests/test_e2e.py  # testes ponta a ponta reais
 ```
 Produção: `cp .env.example .env` e `docker compose up -d --build` (web + worker, volume `/data`). Limites dos planos em `config/plans.yaml`.
+
+### Claude Live Agent + Live MCP
+Monitoramento de lives da Twitch com análise do Claude e cortes automáticos: **`docs/LIVE_AGENT_BETA.md`** (estado, testes reais × simulados, custos, plano Vercel).
+```bash
+python -m web.live.agent                                          # processo contínuo de gravação/análise (3º terminal)
+VM_TEST_MEDIA=/pasta pytest -v web/tests/test_live.py             # [SIM] agente, orçamento, falhas, isolamento, MCP
+LIVE_REAL=1 pytest -v -s web/tests/test_live_real.py              # [REAL] live de verdade na Twitch
+```
+MCP: `<PUBLIC_URL>/mcp` com token pessoal (Conta → ClipeiAki Live MCP) ou `CLIPEIAKI_TOKEN=... python -m web.mcp_server` (stdio).

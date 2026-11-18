@@ -12,4 +12,4 @@ web/tests/test_e2e.py::test_limites_do_plano PASSED                      [ 71%]
 web/tests/test_e2e.py::test_worker_morre_no_meio_e_job_e_retomado PASSED [ 85%]
 web/tests/test_e2e.py::test_cakto_webhooks PASSED                        [100%]
 
-======================== 7 passed in 335.96s (0:05:35) =========================
+======================== 7 passed in 348.43s (0:05:48) =========================

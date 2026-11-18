@@ -189,13 +189,23 @@ def test_worker_morre_no_meio_e_job_e_retomado(env):
 
 
 # ---------------------------------------------------------------- Cakto
+def verify_email(env, email):
+    """Não há provedor de e-mail no ambiente: a verificação é marcada direto no banco (ver docs). Planos pagos só são
+    aplicados a contas verificadas."""
+    db = sqlite3.connect(env["data"] / "app.db"); db.execute("UPDATE users SET email_verified=1 WHERE email=?", (email,)); db.commit(); db.close()
+
+
 def test_cakto_webhooks(env):
     assert hook(env, event("purchase_approved", "ana@exemplo.com", "off_creator", "o1"), secret="errado").status_code == 401
     assert hook(env, {**event("purchase_approved", "ana@exemplo.com", "off_creator", "o1"), "secret": "errado"}, sig=False).status_code == 401
+    a = client(env); a.post("/api/auth/login", json={"email": "ana@exemplo.com", "password": "senha-forte-123"}, headers=H)
+    # conta NÃO verificada não recebe plano pago (evita sequestro de assinatura por quem cadastrou o e-mail antes)
+    r0 = hook(env, {**event("purchase_approved", "ana@exemplo.com", "off_creator", "o0"), "secret": SECRET}, sig=False)
+    assert r0.status_code == 200 and a.get("/api/me").json()["plan"] == "beta"
+    verify_email(env, "ana@exemplo.com")
     r = hook(env, {**event("purchase_approved", "ana@exemplo.com", "off_creator", "o1"), "secret": SECRET}, sig=False)
     assert r.json() == {"applied": True, "plan": "creator", "event": "purchase_approved"}
     assert hook(env, {**event("purchase_approved", "ana@exemplo.com", "off_creator", "o1"), "secret": SECRET}, sig=False).json() == {"duplicate": True}
-    a = client(env); a.post("/api/auth/login", json={"email": "ana@exemplo.com", "password": "senha-forte-123"}, headers=H)
     me = a.get("/api/me").json(); assert me["plan"] == "creator" and me["limits"]["clips_per_project"] == 6
     assert a.get("/api/billing").json()["checkout"] == {"creator": "https://pay.cakto.com.br/creator"}
     # upgrade para Creator Studio (assinatura HMAC)
@@ -212,10 +222,14 @@ def test_cakto_webhooks(env):
     hook(env, event("refund", "ana@exemplo.com", "off_studio", "o5")); assert a.get("/api/me").json()["plan"] == "beta"
     # compra antes do cadastro
     hook(env, event("purchase_approved", "nova@exemplo.com", "off_creator", "o6"))
-    assert signup(env, "nova@exemplo.com").get("/api/me").json()["plan"] == "creator"
+    nv = signup(env, "nova@exemplo.com"); assert nv.get("/api/me").json()["plan"] == "beta"  # sem verificação: não aplica
+    verify_email(env, "nova@exemplo.com")
+    hook(env, event("subscription_renewed", "nova@exemplo.com", "off_creator", "o6b"))  # próxima cobrança aplica na conta verificada
+    assert nv.get("/api/me").json()["plan"] == "creator"
     # vencimento: período expirado volta para o plano de demonstração
     db = sqlite3.connect(env["data"] / "app.db"); db.execute("UPDATE users SET plan_until=? WHERE email='nova@exemplo.com'", (time.time() - 10 * 86400,)); db.commit(); db.close()
     n = client(env); n.post("/api/auth/login", json={"email": "nova@exemplo.com", "password": "senha-forte-123"}, headers=H)
     assert n.get("/api/me").json()["plan"] == "beta"
+    n.close()
     # oferta desconhecida não libera nada
     assert hook(env, event("purchase_approved", "x@exemplo.com", "off_outra", "o7")).json()["applied"] is False

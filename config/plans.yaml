@@ -10,6 +10,9 @@ plans:
     max_video_minutes: 15
     clips_per_project: 3
     premium_assets: false
+    live_max_minutes: 30         # Claude Live Monitor: duração máxima por sessão
+    live_budget_usd_max: 0.50    # teto do orçamento de IA por sessão
+    live_max_calls: 30
   creator:
     label: "Creator"
     price_brl: 49.90
@@ -19,6 +22,9 @@ plans:
     max_video_minutes: 90
     clips_per_project: 6
     premium_assets: false
+    live_max_minutes: 120
+    live_budget_usd_max: 2.00
+    live_max_calls: 120
   studio:
     label: "Creator Studio"
     price_brl: 69.90
@@ -28,3 +34,6 @@ plans:
     max_video_minutes: 180
     clips_per_project: 10
     premium_assets: true   # SFX (whoosh/impacto), punch-in zoom no pico, destaque de palavra-chave
+    live_max_minutes: 240
+    live_budget_usd_max: 5.00
+    live_max_calls: 300

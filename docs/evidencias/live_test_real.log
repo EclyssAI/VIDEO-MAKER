@@ -1,0 +1,70 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.18, pytest-9.1.1, pluggy-1.6.0 -- /usr/local/bin/python3
+rootdir: /home/user/VIDEO-MAKER
+plugins: anyio-4.15.1
+collecting ... collected 1 item
+
+web/tests/test_live_real.py::test_real_twitch_gravacao_deteccao_corte_e_latencias {
+ "channel": {
+  "channel": "xqc",
+  "live": true,
+  "title": "🌴LIVE🌴GTA 6🌴 AT 6AM EST🌴STUFF BEFORE🌴ALERT🌴NOT A DRILL🌴NZ FLIGHT TAKEN🌴LIVE🌴QUICK🌴DONT MISS IT🌴ONESHOTTING THE GAME?🌴",
+  "author": "xQc",
+  "category": "Grand Theft Auto VI",
+  "qualities": [
+   "1080p60",
+   "160p30",
+   "360p30",
+   "480p30",
+   "720p60",
+   "audio_only",
+   "best",
+   "worst"
+  ],
+  "checked_at": 1795038158.5520835
+ },
+ "claude_real": false,
+ "minutes": 4.0,
+ "segments": 24,
+ "recorded_s": 240.3,
+ "segment_lag_s": {
+  "p50": 3.2,
+  "max_after_warmup": 7.4
+ },
+ "candidates": 6,
+ "detection_delay_s": [
+  8.2,
+  10.8,
+  11.9,
+  5.2,
+  4.2,
+  7.4
+ ],
+ "analyses": 0,
+ "analysis_latency_s": [],
+ "analysis_cost_usd": 0,
+ "clips_ready": [
+  {
+   "render_s": 28.6,
+   "event_to_clip_s": null,
+   "source": "manual"
+  }
+ ],
+ "kinds": {
+  "analysis_skipped": 6,
+  "candidate": 6,
+  "clip_queued": 1,
+  "clip_ready": 1,
+  "clip_requested": 1,
+  "created": 1,
+  "layout": 1,
+  "segment": 24,
+  "started": 1,
+  "stop_requested": 1,
+  "stopped": 1
+ },
+ "stop_reason": "user"
+}
+PASSED
+
+======================== 1 passed in 252.89s (0:04:12) =========================

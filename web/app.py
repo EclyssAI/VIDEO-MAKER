@@ -1,10 +1,13 @@
-"""VIDEO-MAKER Web — API + interface. Rodar: uvicorn web.app:app  (o processamento roda em `python -m web.worker`)."""
-import json, os, re, shutil, logging, unicodedata
+"""ClipeiAki (ex-VIDEO-MAKER) Web — API + interface + MCP. Rodar: uvicorn web.app:app  (o processamento roda em `python -m web.worker`)."""
+import asyncio, json, os, re, shutil, logging, unicodedata
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from . import db, auth, plans, billing, copywriter
+import contextlib
+from . import db, auth, plans, billing, copywriter, mcp_server
 from .worker import enqueue
+from .live.api import router as live_router
+from .live import claude_live
 
 log = logging.getLogger("web")
 STATIC = db.ROOT / "web/static"
@@ -12,8 +15,17 @@ ALLOWED_EXT = {".mp4", ".mov", ".mkv", ".webm", ".ts", ".m4v"}
 LANGS = {"auto", "pt", "en", "es"}
 MAX_ACTIVE_PROJECTS = 2
 
-app = FastAPI(title="VIDEO-MAKER", docs_url=None, redoc_url=None, openapi_url=None)
 db.init()
+_mcp_app = mcp_server.http_app()
+
+
+@contextlib.asynccontextmanager
+async def lifespan(_):
+    async with mcp_server.mcp.session_manager.run():
+        yield
+
+api = FastAPI(title="ClipeiAki", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
+app = api  # substituído no fim do arquivo pelo roteador ASGI que inclui o /mcp
 
 
 @app.middleware("http")
@@ -26,9 +38,22 @@ async def guard(request: Request, call_next):
     r = await call_next(request)
     r.headers.update({"X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY", "Referrer-Policy": "same-origin",
                       "Content-Security-Policy": "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; "
-                      "style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"})
+                      "style-src 'self'; script-src 'self'; connect-src 'self'; frame-src https://player.twitch.tv; "
+                      "frame-ancestors 'none'; base-uri 'none'; form-action 'self'"})
     if p.startswith("/api/"): r.headers["Cache-Control"] = "no-store"
     return r
+
+
+MAX_USER_RENDERS = int(os.environ.get("MAX_USER_RENDERS", "8"))
+
+
+def render_backlog(c, uid):
+    return c.execute("SELECT COUNT(*) FROM jobs WHERE user_id=? AND type='render' AND status IN ('queued','running')", (uid,)).fetchone()[0]
+
+
+def one_line(v):
+    """Texto que vai para a legenda (.ass): sem quebras de linha nem sequências de controle."""
+    return re.sub(r"[\r\n\t\\]+", " ", str(v))
 
 
 def current_user(c, request: Request, required=True):
@@ -41,7 +66,8 @@ def me_payload(c, u):
     plan = plans.effective_plan(u); L = plans.limits(plan)
     return {"id": u["id"], "email": u["email"], "name": u["name"], "handle": u["handle"], "plan": plan,
             "plan_label": L["label"] if L else None, "plan_status": u["plan_status"], "plan_until": u["plan_until"],
-            "limits": L, "usage": plans.usage(c, u["id"]), "claude_copy": copywriter.enabled()}
+            "limits": L, "usage": plans.usage(c, u["id"]), "claude_copy": copywriter.enabled(),
+            "live_claude": dict(zip(("state", "detail"), claude_live.status())), "public_url": mcp_server.PUBLIC_URL}
 
 
 async def body(request):
@@ -69,7 +95,7 @@ async def signup(request: Request):
             auth.record_fail(key); raise HTTPException(409, "Já existe uma conta com este e-mail. Entre com sua senha.")
         uid = db.new_id("usr")
         c.execute("INSERT INTO users(id,email,pw_hash,name,created_at) VALUES(?,?,?,?,?)",
-                  (uid, email, auth.hash_pw(pw), str(b.get("name", ""))[:80], db.now()))
+                  (uid, email, await asyncio.to_thread(auth.hash_pw, pw), str(b.get("name", ""))[:80], db.now()))
         billing.apply_pending(c, email)
         token = auth.create_session(c, uid); u = c.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
         resp = JSONResponse(me_payload(c, u))
@@ -80,11 +106,13 @@ async def signup(request: Request):
 async def login(request: Request):
     b = await body(request); email = str(b.get("email", "")).strip().lower()
     key = f"login:{request.client.host if request.client else ''}:{email}"
-    if auth.throttled(key): raise HTTPException(429, "Muitas tentativas. Aguarde alguns minutos.")
+    ekey = f"login-email:{email}"  # limite por conta, independente do IP (IP pode ser forjado atrás de proxy mal configurado)
+    if auth.throttled(key) or auth.throttled(ekey, limit=20): raise HTTPException(429, "Muitas tentativas. Aguarde alguns minutos.")
     with db.conn() as c:
         u = c.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
-        if not u or not auth.check_pw(str(b.get("password", "")), u["pw_hash"]):
-            auth.record_fail(key); raise HTTPException(401, "E-mail ou senha incorretos.")
+        ok = await asyncio.to_thread(auth.check_pw, str(b.get("password", "")), u["pw_hash"] if u else auth.DUMMY_HASH)
+        if not u or not ok:
+            auth.record_fail(key); auth.record_fail(ekey); raise HTTPException(401, "E-mail ou senha incorretos.")
         token = auth.create_session(c, u["id"]); resp = JSONResponse(me_payload(c, u))
     set_cookie(resp, token); return resp
 
@@ -191,7 +219,7 @@ async def upload_source(pid: str, request: Request):
                 if size > limit: raise HTTPException(413, f"Arquivo maior que o limite do plano ({L['max_upload_mb']} MB).")
                 f.write(chunk)
         if size == 0: raise HTTPException(400, "Arquivo vazio.")
-        info = engine.probe(dest)
+        info = await asyncio.to_thread(engine.probe, dest)
     except HTTPException:
         dest.unlink(missing_ok=True); raise
     except engine.EngineError as e:
@@ -245,14 +273,15 @@ async def edit_clip(cid: str, request: Request):
         u = current_user(c, request); x = own_clip(c, u["id"], cid); cp = json.loads(x["copy"])
         if x["status"] in ("queued", "rendering"): raise HTTPException(409, "Aguarde a renderização atual terminar.")
         for k, n in (("screen_title", 40), ("title", 100), ("description", 2000)):
-            if k in b: cp[k] = str(b[k]).strip()[:n]
+            if k in b: cp[k] = (str(b[k]) if k == "description" else one_line(b[k])).strip()[:n]
         if "hashtags" in b:
             cp["hashtags"] = ["#" + re.sub(r"[^\wÀ-ÿ]", "", h.lstrip("#"))[:30] for h in str(b["hashtags"]).split() if h.strip("#")][:8]
         if "captions" in b and isinstance(b["captions"], list):
             caps = cp.get("captions", [])
-            for i, t in enumerate(b["captions"][:len(caps)]): caps[i]["t"] = str(t)[:80]
+            for i, t in enumerate(b["captions"][:len(caps)]): caps[i]["t"] = one_line(t)[:80]
             cp["captions"] = [k for k in caps if k["t"].strip()]
         if not cp.get("screen_title"): raise HTTPException(400, "O título na tela não pode ficar vazio.")
+        if render_backlog(c, u["id"]) >= MAX_USER_RENDERS: raise HTTPException(429, "Muitos cortes na fila. Aguarde os atuais terminarem.")
         c.execute("UPDATE clips SET copy=?, status='queued', updated_at=? WHERE id=?", (json.dumps(cp, ensure_ascii=False), db.now(), cid))
         c.execute("UPDATE projects SET status='rendering', updated_at=? WHERE id=? AND status='done'", (db.now(), x["project_id"]))
         enqueue(c, u["id"], "render", x["project_id"], cid)
@@ -353,6 +382,7 @@ def healthz():
 
 
 # ---------- interface ----------
+app.include_router(live_router)
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
@@ -360,3 +390,44 @@ app.mount("/static", StaticFiles(directory=STATIC), name="static")
 def spa(path: str):
     if path.startswith("api/"): raise HTTPException(404)
     return FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-cache"})
+
+
+MAX_BODY = int(os.environ.get("MAX_JSON_BODY", str(256 * 1024)))
+_UPLOAD = re.compile(r"^/api/projects/[^/]+/source$")
+
+
+class BodyTooLarge(Exception): pass
+
+
+class _Router:
+    """ASGI: /mcp e o metadata OAuth do recurso vão para o servidor MCP oficial; o resto para a API/interface.
+    Também limita o corpo das requisições (exceto o upload de vídeo, que tem limite próprio por plano)."""
+    def __init__(self, web, mcp): self.web, self.mcp = web, mcp
+
+    async def __call__(self, scope, receive, send):
+        p = scope.get("path", "") if scope["type"] in ("http", "websocket") else ""
+        if p == "/mcp" or p.startswith("/mcp/") or p.startswith("/.well-known/oauth-protected-resource"):
+            return await self.mcp(scope, receive, send)
+        if scope["type"] != "http" or _UPLOAD.match(p) or scope.get("method") in ("GET", "HEAD"):
+            return await self.web(scope, receive, send)
+        cl = dict(scope.get("headers") or []).get(b"content-length")
+        if cl and cl.isdigit() and int(cl) > MAX_BODY: return await self._413(send)
+        seen = 0
+        async def capped():
+            nonlocal seen
+            msg = await receive()
+            if msg["type"] == "http.request":
+                seen += len(msg.get("body", b""))
+                if seen > MAX_BODY: raise BodyTooLarge()
+            return msg
+        try:
+            return await self.web(scope, capped, send)
+        except BodyTooLarge:
+            return await self._413(send)
+
+    async def _413(self, send):
+        await send({"type": "http.response.start", "status": 413, "headers": [(b"content-type", b"application/json")]})
+        await send({"type": "http.response.body", "body": '{"detail":"Requisição grande demais."}'.encode()})
+
+
+app = _Router(api, _mcp_app)

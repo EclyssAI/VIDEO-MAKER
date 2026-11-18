@@ -51,7 +51,7 @@ def run_analyze(c, job):
     t = db.now()
     for k, cl in enumerate(clips):
         cid = db.new_id("clip"); cl["src"] = p["source_file"]  # caminho relativo ao projeto (não vaza no cliente)
-        c.execute("INSERT INTO clips(id,user_id,project_id,idx,start,end,peak,strength,data,copy,status,created_at,updated_at) "
+        c.execute('INSERT INTO clips(id,user_id,project_id,idx,start,"end",peak,strength,data,copy,status,created_at,updated_at) '
                   "VALUES(?,?,?,?,?,?,?,?,?,?,'queued',?,?)", (cid, p["user_id"], p["id"], k + 1, cl["start"], cl["end"],
                   cl["peak"], cl["strength"], json.dumps(cl), json.dumps(copies[cl["id"]], ensure_ascii=False), t, t))
         enqueue(c, p["user_id"], "render", p["id"], cid)
