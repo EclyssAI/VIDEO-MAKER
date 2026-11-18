@@ -45,9 +45,11 @@ def render(c, cp, out_root, n):
     dur = c["end"]-c["start"]; cam = c["webcam"]; P = c["peak"]
     gx, gy, gw, gh = L["game_cam" if cam else "game_full"]
     out = out_root/f"{n:02d}_{slug(cp['title'])}"; out.mkdir(parents=True, exist_ok=True)
-    caps = cp.get("captions") or captions(c["words"]); ass(out/"subs.ass", cp["title"], caps)
+    caps = cp.get("captions") or captions(c["words"]); ass(out/"subs.ass", cp.get("screen_title", cp["title"]), caps)
     sw = gh*16/9  # largura do jogo escalado (fonte 16:9)
     xoff = (sw-gw)/2
+    if c.get("focus") is not None and not cam:  # centraliza o streamer/ação (fração da largura da fonte)
+        xoff = max(0, min(sw-gw, c["focus"]*sw - gw/2))
     if cam:  # afasta o recorte do jogo da webcam
         k = gh/1080; cx0, cx1 = cam[0]*k, (cam[0]+cam[2])*k
         xoff = max(0, min(xoff, cx0-gw)) if cam[0] > 960 else min(sw-gw, max(xoff, cx1))
@@ -58,7 +60,7 @@ def render(c, cp, out_root, n):
            "-i",str(A/f"mask_{'game_cam' if cam else 'game_full'}.png"), "-i",str(A/"mask_cam.png"),
            "-i",str(R/"template/sfx/whoosh.wav"), "-i",str(R/"template/sfx/impact.wav")]
     g = (f"[1:v]fps=30,split[gs][cs];" +
-         (f"[gs]scale=-2:{gh},crop={gw}:{gh}:{xoff:.0f}:0" if cam else f"[gs]scale={gw}:{gh}:force_original_aspect_ratio=increase,crop={gw}:{gh}") + f"{zoom},format=yuva420p[g0];[g0][5:v]alphamerge[g];"
+         (f"[gs]scale=-2:{gh},crop={gw}:{gh}:{xoff:.0f}:0" if (cam or c.get("focus") is not None) else f"[gs]scale={gw}:{gh}:force_original_aspect_ratio=increase,crop={gw}:{gh}") + f"{zoom},format=yuva420p[g0];[g0][5:v]alphamerge[g];"
          f"[0:v]format=yuva420p,trim=duration={dur}[bg];[bg][g]overlay={gx}:{gy}[v1];")
     if cam:
         x, y, w, h = cam; cx, cy, cw, ch = L["cam"]
@@ -78,10 +80,25 @@ def render(c, cp, out_root, n):
         "status": "aguardando_aprovacao"}, ensure_ascii=False, indent=1))
     return out
 
+def compile_(clips, comp, out_root):
+    """Compilação: renderiza cada trecho com o mesmo título de tela e concatena (>60 s p/ monetização)."""
+    tmp = out_root/"_parts"; parts = []
+    for k, cid in enumerate(comp["order"]):
+        c = next(x for x in clips if x["id"] == cid); cp = {**comp, **COPY.get(cid, {})}
+        parts.append(render(c, cp, tmp, k+1)/"video.mp4")
+    out = out_root/f"01_{slug(comp['title'])}"; out.mkdir(parents=True, exist_ok=True)
+    (tmp/"list.txt").write_text("".join(f"file '{p}'\n" for p in parts))
+    subprocess.run(["ffmpeg","-y","-v","error","-f","concat","-safe","0","-i",str(tmp/"list.txt"),"-c:v","libx264","-preset","veryfast","-crf","20",
+        "-c:a","aac","-b:a","160k","-af","loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000","-movflags","+faststart",str(out/"video.mp4")], check=True)
+    for f in ("descricao.txt", "meta.json"): (out/f).write_text((parts[0].parent/f).read_text())
+    subprocess.run(["ffmpeg","-y","-v","error","-ss","3","-i",str(out/"video.mp4"),"-frames:v","1","-vf","scale=360:-2",str(out/"thumb.jpg")])
+    import shutil; shutil.rmtree(tmp); return out
+
 if __name__ == "__main__":
     b = pathlib.Path(sys.argv[1]); clips = json.loads((b/"pending.json").read_text())
     copy = json.loads((b/"copy.json").read_text()) if (b/"copy.json").exists() else {}
-    out_root = R/"output"/b.name
+    COPY = copy; out_root = R/"output"/b.name
+    if "_compilation" in copy: print("[ok]", compile_(clips, copy["_compilation"], out_root)); sys.exit()
     for n, c in enumerate(clips, 1):
         cp = copy.get(c["id"])
         if not cp:

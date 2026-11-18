@@ -1,6 +1,13 @@
 # Changelog — ClipeiAki
 Versionamento semântico (MAJOR.MINOR.PATCH). Versão atual em `VERSION`.
 
+## [0.4.0] — 2026-11-18 — Compilações monetizáveis + regras do canal
+- Template: mascote encosta na barra inferior.
+- Legendas: apenas tradução da fala (sem comentários nossos).
+- Títulos: `screen_title` (tela, molde gringo) separado de `title` (post, com pergunta de engajamento); skill hook-writer-sms instalada.
+- Modo compilação (`_compilation` no copy.json): vários trechos → um vídeo > 60 s (TikTok Creator Rewards).
+- `focus` por trecho para centralizar o streamer em layout sem webcam.
+
 ## [0.3.1] — 2026-11-18 — Primeiro clip real
 - Legendas com quebra em 2 linhas + ajuste automático de tamanho (não cortam mais na borda).
 - Áudio normalizado para -14 LUFS / pico -1,5 dBFS (padrão TikTok/Reels/Shorts).

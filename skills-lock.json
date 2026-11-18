@@ -43,6 +43,13 @@
       "skillPath": "skills/finishing-a-development-branch/SKILL.md",
       "computedHash": "7e24d821d45b8f10773edd9f1a4be2fac90eedae4f8fc8e70e34e27e44d3f3c0"
     },
+    "hook-writer-sms": {
+      "source": "blacktwist/social-media-skills",
+      "commit": "4f85b07069983b3b0b9bbe6519fed7017edcce81",
+      "sourceType": "github",
+      "skillPath": "skills/hook-writer-sms/SKILL.md",
+      "computedHash": "7ed4eaacbc2d8875e4b94de7983a85fe6eebb37e5beaca05d75c06c17d58e780"
+    },
     "receiving-code-review": {
       "source": "obra/superpowers",
       "commit": "22f0b463e7a5e579904dd6211a520321035526f7",

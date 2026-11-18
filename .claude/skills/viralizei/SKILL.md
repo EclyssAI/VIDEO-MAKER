@@ -47,3 +47,13 @@ Nunca repetir o mesmo ângulo em cortes seguidos do mesmo lote. Escolher 1 ângu
 | Identidade | "Todo jogador de GTA RP já passou por isso" |
 | Loop aberto | "Espera o final…" (só se o payoff estiver nos últimos 2 s) |
 Regras: loop aberto nos 2 primeiros segundos; especificidade > adjetivo; 1 emoji no máximo; CTA de comentário na descrição.
+
+## Regras do dono do canal (v0.4 — valem SEMPRE, acima das anteriores)
+1. **Legenda = só tradução da fala.** Proibido comentário/narração nossa ("VOOU PELO PARA-BRISA", "KKKK"). Sem fala = sem legenda. Palavrão traduzido e censurado (P*RRA).
+2. **Título no molde gringo + gatilho de comentário.** Tela (`screen_title`, ≤35 chars): molde gringo traduzido. Post (`title`, ≤60): molde + pergunta que divide opinião.
+   Moldes gringos (canais de clips US): "X Reacts to Y For The First Time 😭" → "X vendo Y pela 1ª vez 😭" · "X Can't Stop Y 💀" → "X não consegue parar de Y 💀" · "Bro Had ONE Job…" → "Ele só tinha UMA missão…" · "X Was NOT Ready For This" → "X NÃO tava pronto pra isso" · "Chat Made X Do Y" → "O chat fez X Y" · "POV: …".
+   Perguntas de engajamento: "Você vai jogar dia 19?", "Quem dirige pior: ele ou você?", "Isso foi bug ou skill?".
+3. **Monetização:** priorizar vídeos de **61–90 s** (TikTok Creator Rewards exige > 1 min). Se um clip é curto, montar **compilação** com arco narrativo (expectativa → clímax → payoff) via `_compilation` no copy.json:
+   `{"_compilation": {"order": ["a","b"], "screen_title": "...", "title": "...", "description": "...", "hashtags": [...]}, "a": {"captions": [...]}}`
+4. Streamer fora do centro em layout sem webcam: usar `focus` (0–1, fração da largura) no pending.json.
+5. Mascote encosta na barra inferior (template/assets/mascot.png já ajustado).
