@@ -86,8 +86,9 @@ def connect():
 
 def init():
     from .live.store import SCHEMA as LIVE_SCHEMA
+    from .oauth import SCHEMA as OAUTH_SCHEMA
     with contextlib.closing(connect()) as c:
-        c.executescript(SCHEMA + LIVE_SCHEMA); migrate(c)
+        c.executescript(SCHEMA + LIVE_SCHEMA + OAUTH_SCHEMA); migrate(c)
         c.execute("CREATE INDEX IF NOT EXISTS ix_live_sessions_stream ON live_sessions(stream_id, created_at)")
 
 

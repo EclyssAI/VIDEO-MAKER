@@ -74,7 +74,10 @@ async function route() {
   clearTimeout(S.timer); if (S.es) { S.es.close(); S.es = null; }
   const p = location.pathname;
   if (!S.me) { try { S.me = await api("/api/me", { quiet: true }); } catch { S.me = null; } }
-  if (!S.me) return p === "/criar-conta" ? authView("signup") : authView("login");
+  if (!S.me) {  // volta para a conexão do Claude depois do login
+    if (p === "/conectar-claude") sessionStorage.setItem("next", p + location.search);
+    return p === "/criar-conta" ? authView("signup") : authView("login");
+  }
   if (p === "/entrar" || p === "/criar-conta") return go("/");
   if (S.me.terms && S.me.terms.required) return termsGate();
   try {
@@ -85,8 +88,31 @@ async function route() {
     if (p === "/conta") return await account();
     if (p === "/live") return await liveHome();
     if (p.startsWith("/live/")) return await liveSession(p.split("/")[2]);
+    if (p === "/conectar-claude") return await consentView();
     render(shell("", `<div class="empty"><h2>Página não encontrada</h2><a class="btn" href="/" data-link>Voltar ao painel</a></div>`));
   } catch (e) { if (S.me) render(shell("", `<div class="empty"><h2>Não foi possível carregar</h2><p>${esc(e.message)}</p><a class="btn" href="/" data-link>Voltar</a></div>`)); }
+}
+
+/* consentimento OAuth: o Claude do cliente pede acesso à conta pelo MCP */
+async function consentView() {
+  const rid = new URLSearchParams(location.search).get("req") || "";
+  let r; try { r = await api(`/api/oauth/requests/${encodeURIComponent(rid)}`); }
+  catch (e) { return render(shell("", `<div class="empty"><h2>Conexão não encontrada</h2><p>${esc(e.message)}</p><a class="btn" href="/" data-link>Voltar ao painel</a></div>`)); }
+  render(`<div class="auth-panel gate"><form class="auth-box stack" id="cf"><div class="brand"><img src="/static/icon.svg" alt="">ClipeiAki</div>
+    <h2>Conectar ${esc(r.client_name)} à sua conta</h2>
+    <p class="muted">Conta: <strong>${esc(S.me.email)}</strong></p>
+    <p class="${r.verified_host ? "notice" : "notice bad"}">Depois de autorizar, você volta para <strong>${esc(r.redirect_host)}</strong>${r.verified_host ? " (domínio conhecido do Claude)." : ". Este domínio não é um endereço conhecido do Claude: só autorize se foi você que iniciou a conexão."}</p>
+    <div><p>Este aplicativo poderá:</p><ul class="limits">${r.scopes.map((x) => `<li><span>${esc(x.description)}</span><code>${esc(x.scope)}</code></li>`).join("")}</ul></div>
+    <p class="muted small">Pelo MCP, o seu Claude recebe frames e falas dos momentos detectados e pode criar e aprovar cortes em seu nome. Você pode desconectar a qualquer momento em Conta e plano. Veja as <a href="/regras-live-ia" target="_blank" rel="noopener">Regras do Live Monitor e IA</a>.</p>
+    <p class="error-text" id="ce" role="alert"></p>
+    <div class="row"><button class="btn primary" type="submit" id="cok">Autorizar</button><button class="btn ghost" type="button" id="cno">Cancelar</button></div></form></div>`);
+  const decide = async (approve) => {
+    $("#cok").disabled = true;
+    try { const d = await api(`/api/oauth/requests/${encodeURIComponent(rid)}`, { method: "POST", json: { approve } }); location.href = d.redirect; }
+    catch (e) { $("#ce").textContent = e.message; $("#cok").disabled = false; }
+  };
+  $("#cf").onsubmit = (e) => { e.preventDefault(); decide(true); };
+  $("#cno").onclick = () => decide(false);
 }
 
 function termsGate() {
@@ -131,7 +157,7 @@ function authView(mode) {
     e.preventDefault(); const btn = e.submitter; btn.disabled = true; $("#aerr").textContent = "";
     const body = { email: $("#email").value, password: $("#pw").value };
     if (mode === "signup") Object.assign(body, { name: $("#name").value, invite: $("#invite").value, accept_terms: $("#acc").checked });
-    try { S.me = await api(`/api/auth/${mode}`, { method: "POST", json: body }); go("/"); }
+    try { S.me = await api(`/api/auth/${mode}`, { method: "POST", json: body }); const nx = sessionStorage.getItem("next"); sessionStorage.removeItem("next"); go(nx && nx.startsWith("/conectar-claude") ? nx : "/"); }
     catch (err) { $("#aerr").textContent = err.message; btn.disabled = false; }
   };
   $("#email").focus();

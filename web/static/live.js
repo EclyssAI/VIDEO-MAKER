@@ -3,7 +3,7 @@
 const LSTATUS = { starting: ["Iniciando", "run"], running: ["Gravando", "ok"], reconnecting: ["Reconectando", "warn"], stopping: ["Encerrando", "warn"], stopped: ["Encerrada", ""] };
 const STOPR = { user: "parada por você", duration: "limite de duração", budget: "orçamento esgotado", calls: "limite de chamadas", offline: "live offline", error: "erro no agente",
   quota: "franquia mensal esgotada", plan: "plano inativo" };
-const CLAUDE = { disabled: ["Desconectado", "bad"], idle: ["Pronto, aguardando momento", "warn"], calling: ["Analisando agora", "run"], ok: ["Conectado", "ok"], error: ["Erro na API", "bad"] };
+const CLAUDE = { disabled: ["Revisão pelo seu Claude (MCP)", ""], idle: ["Pronto, aguardando momento", "warn"], calling: ["Analisando agora", "run"], ok: ["Conectado", "ok"], error: ["Erro na API", "bad"] };
 const MSTATUS = { waiting: "Gravando o pós-evento", ready: "Na fila do Claude", analyzing: "Claude analisando", candidate: "Candidato (sem análise)", rejected: "Claude descartou",
   clip_pending: "Claude aprovou · cortando", clip_requested: "Corte solicitado", clip_queued: "Renderizando", clipped: "Corte pronto", clip_failed: "Falha no corte",
   skipped: "Não analisado", invalid: "Resposta inválida", expired: "Expirado" };
@@ -15,11 +15,11 @@ function claudeChip(cl) { const [t, k] = CLAUDE[cl.state] || [cl.state, ""]; ret
 
 function liveDashCard(sessions, me) {
   const act = sessions.filter((s) => s.status !== "stopped"); const cs = me.live_claude || {}; const slots = me.limits ? me.limits.live_slots : 0;
-  const claude = cs.state === "ready" ? `<span class="chip ok">Claude API configurada</span>` : `<span class="chip bad">Claude desconectado</span>`;
+  const claude = `<a class="chip" href="/conta#tokens" data-link>Revisão pelo seu Claude (MCP)</a>`;
   const body = `<div class="row"><p class="muted">${act.length ? `${act.length} de ${slots} transmissões sendo monitoradas agora.` : `Conecte até ${slots} transmissão(ões) da Twitch e acompanhe todas numa grade, com preview real de cada uma.`}</p>
       <span class="spacer"></span><a class="btn primary" href="/live" data-link>${icon("radio")}Abrir Live Monitor</a></div>`;
   return `<section class="panel live-dash stack" aria-labelledby="ldh"><div class="row"><h2 id="ldh">Live Monitor</h2><span class="spacer"></span>${claude}</div>
-    ${cs.state === "ready" ? "" : `<p class="muted small">${esc(cs.detail || "")} A gravação e a detecção funcionam; a análise do Claude fica desativada até a chave ser configurada.</p>`}${body}</section>`;
+    ${body}</section>`;
 }
 
 /* estado da transmissão (vem do backend: service.stream_out) */
@@ -56,11 +56,11 @@ async function liveHome() {
   const q = mon.quota;
   render(shell("/live", `<div class="page-head"><div><h1>Live Monitor</h1><p>${mon.slots ? `Plano ${esc(mon.plan)}: até <strong>${mon.slots}</strong> transmissões ao mesmo tempo.` : "Sem plano ativo."}
       O agente do servidor grava cada transmissão em blocos de 10 s; nada depende desta aba aberta.</p></div>
-      <div class="row">${cs.state === "ready" ? '<span class="chip ok">Claude API configurada</span>' : '<span class="chip bad">Claude desconectado</span>'}</div></div>
+      <div class="row">${mon.mcp_last_use && Date.now() / 1000 - mon.mcp_last_use < 3600 ? `<span class="chip ok">Seu Claude conectado · ${ago(mon.mcp_last_use)}</span>` : `<a class="chip" href="/conta#tokens" data-link>Conectar seu Claude (MCP)</a>`}</div></div>
     <div class="meters"><div class="meter"><span class="muted">Monitorando agora</span><div class="num">${mon.active} <span>de ${mon.slots}</span></div><progress max="${mon.slots || 1}" value="${mon.active}" aria-label="Transmissões ativas"></progress></div>
       ${q ? `<div class="meter"><span class="muted">Horas de monitoramento no mês</span><div class="num">${mon.usage.live_hours.toFixed(1)} <span>de ${q.live_hours_per_month} h</span></div><progress max="${q.live_hours_per_month}" value="${mon.usage.live_hours}" aria-label="Horas usadas"></progress></div>
       <div class="meter"><span class="muted">Cortes do Live no mês</span><div class="num">${mon.usage.live_clips} <span>de ${q.live_clips_per_month}</span></div><progress max="${q.live_clips_per_month}" value="${mon.usage.live_clips}" aria-label="Cortes usados"></progress></div>` : ""}</div>
-    ${cs.state === "ready" ? "" : `<p class="notice">${esc(cs.detail)} Gravação, detecção de candidatos e cortes manuais funcionam; nenhum frame é enviado à IA.</p>`}
+    <p class="muted small">Gravação e detecção rodam no servidor. A decisão dos cortes é sua ou do seu Claude, conectado pelo MCP.</p>
     ${mon.test_source ? `<p class="notice bad">Ambiente de teste: as transmissões abaixo são arquivos de vídeo locais tocados como se fossem lives (não são canais reais).</p>` : ""}
     ${free > 0 && L ? `<form class="panel stack connect" id="lf" aria-labelledby="lfh"><h2 id="lfh">Conectar transmissão <span class="muted small">(${free} slot${free > 1 ? "s" : ""} livre${free > 1 ? "s" : ""})</span></h2>
       <div class="field"><label for="lch">Canal da Twitch</label><div class="row"><input class="input grow" id="lch" placeholder="twitch.tv/canal" autocomplete="off" required>
@@ -118,7 +118,8 @@ const KIND = {
   layout: (d) => d.webcam ? "Webcam detectada no canto da tela" : "Sem webcam: enquadramento de tela cheia",
   candidate: (d) => `Momento candidato · áudio ${d.audio_db_above_baseline > 0 ? "+" : ""}${d.audio_db_above_baseline} dB${d.keywords.length ? " · “" + d.keywords.join("”, “") + "”" : ""}${d.visual_change_z >= 6 ? " · mudança de imagem" : ""}`,
   analysis_started: (d) => `Enviado ao Claude: ${d.frames_t.length} frame(s) em t=${d.frames_t.map(fmtT).join(", ")} + transcrição`,
-  analysis: (d) => `Claude: ${d.decision === "clip" ? "CORTAR" : "IGNORAR"} (${Math.round(d.confidence * 100)}%) · ${d.reason}`,
+  analysis: (d) => `${d.via === "mcp" ? "Seu Claude (MCP" + (d.client ? " · " + d.client : "") + ")" : "Claude"}: ${d.decision === "clip" ? "CORTAR" : "IGNORAR"} (${Math.round(d.confidence * 100)}%) · ${d.reason}`,
+  frames_shared: (d) => `${d.frames.length} frame(s) mostrados ao seu Claude pelo MCP (t=${d.frames.map((f) => fmtT(f.t)).join(", ")})`,
   analysis_invalid: (d) => `Resposta do Claude rejeitada na validação: ${d.error}`, analysis_skipped: (d) => `Não analisado: ${d.reason}`,
   claude_error: (d) => `Falha ao chamar o Claude: ${d.error}`, clip_requested: () => "Corte solicitado",
   clip_queued: (d) => `Corte enviado ao render (${fmtT(d.start_t)}–${fmtT(d.end_t)}) · ${d.screen_title}`,
@@ -157,7 +158,7 @@ async function liveSession(sid) {
     $("#lstop")?.addEventListener("click", async () => { if (!confirm("Parar o monitoramento desta live?")) return; try { paint(await api(`/api/live/sessions/${sid}/stop`, { method: "POST" })); } catch (e) { toast(e.message, true); } });
     const la = x.last_analysis, cl = x.claude; const mid = la && la.frames.length ? la.frames[Math.floor(la.frames.length / 2)] : null;
     $("#lclaude").innerHTML = `<div class="row"><h2>Análise do Claude</h2><span class="spacer"></span>${claudeChip(cl)}</div>
-      ${cl.state === "disabled" ? `<p class="notice bad">${esc(cl.detail)} Nenhum frame é enviado à IA nesta sessão; os momentos ficam como candidatos.</p>` : `<p class="muted small">${esc(cl.detail || "")}${cl.last_call_at ? " · última chamada " + clock(cl.last_call_at) : ""}</p>`}
+      ${cl.state === "disabled" ? `<p class="notice">${esc(cl.detail)} Os momentos ficam como candidatos até o seu Claude (pelo MCP) ou você decidir.</p>` : `<p class="muted small">${esc(cl.detail || "")}${cl.last_call_at ? " · última chamada " + clock(cl.last_call_at) : ""}</p>`}
       <div class="claude-grid"><figure class="lframe">${mid ? `<img src="/api/live/frames/${esc(mid.id)}" alt="Último frame enviado ao Claude, t=${fmtT(mid.t)}">
           <figcaption>Último frame enviado à IA · t=${fmtT(mid.t)} da gravação · ${clock(mid.wall)} · sha256 ${esc(mid.sha256.slice(0, 12))}…</figcaption>`
           : `<div class="lframe-empty">${cl.state === "disabled" ? "Claude desconectado: nenhum frame enviado" : "Nenhum frame enviado ainda"}</div>`}</figure>

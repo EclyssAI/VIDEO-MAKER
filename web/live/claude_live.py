@@ -39,7 +39,8 @@ class InvalidDecision(Exception):
 
 def status():
     """Estado de configuração real (sem chamar a API)."""
-    if os.environ.get("LIVE_CLAUDE_ENABLED", "1") != "1": return "disabled", "Análise Claude desligada pela configuração do servidor."
+    if os.environ.get("LIVE_CLAUDE_ENABLED", "0") != "1":
+        return "disabled", "Sem análise automática no servidor: a revisão dos momentos é feita pelo seu Claude via MCP (ou por você)."
     if not os.environ.get("ANTHROPIC_API_KEY"): return "disabled", "ANTHROPIC_API_KEY não configurada no servidor."
     return "ready", f"Modelo {MODEL}"
 

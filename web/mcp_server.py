@@ -13,28 +13,17 @@ from urllib.parse import urlparse
 from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.auth.provider import AccessToken
-from mcp.server.auth.settings import AuthSettings
+from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
 from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.types import ToolAnnotations
 from mcp.server.mcpserver.utilities.types import Image
-from . import db, tokens, legal
+from . import db, tokens, legal, oauth
 from .live import service
 
 log = logging.getLogger("mcp")
 PUBLIC_URL = os.environ.get("PUBLIC_URL", "http://localhost:8000").rstrip("/")
 VERSION = "0.2.0"
 _stdio = None  # (user_id, scopes) quando rodando por stdio
-
-
-class TokenVerifier:
-    async def verify_token(self, token: str) -> AccessToken | None:
-        def check():
-            with db.conn() as c: return tokens.verify(c, token)
-        r = await asyncio.to_thread(check)
-        if not r: return None
-        user, scopes = r
-        return AccessToken(token=token, client_id=user["id"], subject=user["id"], scopes=scopes, expires_at=None,
-                           resource=f"{PUBLIC_URL}/mcp")
 
 
 mcp = MCPServer(
@@ -44,9 +33,13 @@ mcp = MCPServer(
                  "palavras, evidências (frames enviados ao Claude com SHA-256, transcrição, decisão), criação e aprovação de cortes e "
                  "fila de render. O monitoramento roda no Live Agent do servidor; este chat não assiste ao vídeo continuamente. "
                  "Timestamps t_* são segundos da gravação da sessão; wall_at é horário UTC (epoch).",
-    token_verifier=TokenVerifier(),
+    # OAuth 2.1 próprio (registro dinâmico + PKCE + consentimento) para o conector do Claude do cliente;
+    # o mesmo provider também aceita os tokens pessoais cak_… (Claude Code com header Authorization).
+    auth_server_provider=oauth.Provider(),
     auth=AuthSettings(issuer_url=PUBLIC_URL, resource_server_url=f"{PUBLIC_URL}/mcp", required_scopes=None,
-                      validate_token_resource=True))
+                      service_documentation_url=f"{PUBLIC_URL}/regras-live-ia",
+                      client_registration_options=ClientRegistrationOptions(enabled=True, valid_scopes=oauth.SCOPES, default_scopes=oauth.SCOPES),
+                      revocation_options=RevocationOptions(enabled=True), validate_token_resource=True))
 
 RO = ToolAnnotations(read_only_hint=True)
 
@@ -68,9 +61,9 @@ def _rate(key, kind):
 
 def principal(scope: str) -> str:
     tok = get_access_token()
-    if tok: uid, scopes, key = tok.client_id, tok.scopes, hashlib.sha256(tok.token.encode()).hexdigest()[:16]
+    if tok: uid, scopes, key = tok.subject or tok.client_id, tok.scopes, hashlib.sha256(tok.token.encode()).hexdigest()[:16]
     elif _stdio: (uid, scopes), key = _stdio, "stdio"
-    else: raise ToolError("Não autenticado: envie um token pessoal do ClipeiAki.")
+    else: raise ToolError("Não autenticado: conecte o ClipeiAki no seu Claude (OAuth) ou envie um token pessoal.")
     if scope not in scopes: raise ToolError(f"Este token não tem o escopo '{scope}'.")
     _rate(key, "read" if scope.endswith(":read") else "write")
     return uid
@@ -134,11 +127,12 @@ def list_detected_moments(stream_id: str | None = None, session_id: str | None =
 
 @mcp.tool(annotations=RO)
 def get_highlight(moment_id: str, include_frames: bool = True) -> list:
-    """Evidências reais de um momento: janela, sinais medidos, transcrição da janela, decisão validada do Claude
-    (confiança, início/fim, justificativa), frames que FORAM enviados ao Claude (com SHA-256; até 3 imagens anexadas)
-    e o corte gerado. Escopo live:read."""
+    """Evidências reais de um momento para você (Claude) decidir: janela, sinais medidos (áudio/imagem/palavras), transcrição
+    da janela, até 3 frames JPEG do trecho (extraídos do buffer da gravação e registrados com SHA-256 como "mostrados ao
+    Claude"), decisão já tomada e corte gerado. Os frames só existem enquanto o trecho está no buffer (~10–15 min). Escopo live:read."""
     uid = principal("live:read")
     def go(c):
+        if include_frames: service.evidence_frames(c, uid, moment_id, 3)  # extrai do buffer se ainda não houver frames registrados
         h = service.highlight(c, uid, moment_id); imgs = []
         if include_frames:
             for f in h["frames_sent_to_claude"][:3]:
@@ -227,6 +221,38 @@ def approve_clip(clip_id: str) -> dict:
     def go(c):
         need_terms(c, uid); return service.approve_clip(c, uid, clip_id)
     return run(go)
+
+
+@mcp.tool()
+def review_moment(moment_id: str, decision: str, confidence: float, reason: str, start_t: float | None = None, end_t: float | None = None,
+                  screen_title: str = "", title: str = "", summary: str = "") -> dict:
+    """Registra a SUA decisão (Claude) sobre um momento depois de ver get_highlight. decision: "clip" (vira corte) ou "skip".
+    start_t/end_t: segundos da gravação, dentro da janela do momento, corte de 5 a 60 s começando um pouco antes do gatilho.
+    screen_title: até 32 caracteres em MAIÚSCULAS (texto na tela); title: título do post; reason: justificativa citando
+    timestamps; summary: o que acontece. Descreva só o que os frames e a transcrição mostram. Conta na franquia de cortes.
+    O usuário ainda revisa e aprova o corte antes do download. Escopo clips:write."""
+    uid = principal("clips:write"); tok = get_access_token()
+    def go(c):
+        need_terms(c, uid)
+        cname = "Claude Code (token pessoal)"
+        if tok and tok.client_id != "personal-token":
+            r = c.execute("SELECT info FROM oauth_clients WHERE client_id=?", (tok.client_id,)).fetchone()
+            cname = oauth.client_name(json.loads(r["info"])) if r else tok.client_id
+        return service.review_moment(c, uid, moment_id, decision, confidence, start_t, end_t, screen_title, title, reason, summary, cname)
+    return run(go)
+
+
+@mcp.prompt()
+def revisar_momentos(stream_id: str = "") -> str:
+    """Roteiro para o Claude revisar os momentos detectados nas lives e decidir os cortes."""
+    alvo = f"a transmissão {stream_id}" if stream_id else "todas as transmissões conectadas"
+    return (f"Revise os momentos detectados em {alvo} do ClipeiAki:\n"
+            "1. Chame list_connected_streamers e veja quais estão ao vivo.\n"
+            "2. Para cada uma, chame list_detected_moments com status 'candidate'.\n"
+            "3. Para cada candidato, chame get_highlight e olhe os frames e a transcrição. Não invente o que não está neles.\n"
+            "4. Decida com review_moment: 'clip' só para reação, susto, piada, jogada, briga ou revelação que funcione sozinha em 8 a 45 s;"
+            " caso contrário 'skip'. Use start_t/end_t dentro da janela, começando um pouco antes do gatilho.\n"
+            "5. Ao final, chame list_render_jobs e me diga quais cortes ficaram prontos para eu revisar e aprovar no app.")
 
 
 @mcp.tool(annotations=RO)

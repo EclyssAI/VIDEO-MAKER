@@ -20,6 +20,7 @@ E = os.environ.get
 LEASE_S = int(E("LIVE_LEASE_S", "45"))
 SEG_S = int(E("LIVE_SEGMENT_S", "10"))
 BUFFER_S = int(E("LIVE_BUFFER_S", "600"))
+REVIEW_S = int(E("LIVE_REVIEW_S", "900"))  # janela para revisar um candidato com o trecho ainda no buffer
 PRE_S, POST_S = float(E("LIVE_PRE_S", "15")), float(E("LIVE_POST_S", "8"))
 COOLDOWN_S = float(E("LIVE_COOLDOWN_S", "30"))
 MIN_CALL_INTERVAL = float(E("LIVE_MIN_CALL_INTERVAL_S", "15"))
@@ -471,8 +472,10 @@ class Runner(threading.Thread):
 
     def retention(self, s):
         keep_from = s["recorded_s"] - BUFFER_S
-        need = self.c.execute("SELECT MIN(w_start) FROM live_moments WHERE session_id=? AND status IN "
-                              "('waiting','ready','analyzing','clip_pending','clip_requested')", (self.sid,)).fetchone()[0]
+        # candidatos aguardando revisão (pelo Claude do cliente via MCP ou pelo usuário) mantêm o trecho por REVIEW_S
+        need = self.c.execute("SELECT MIN(w_start) FROM live_moments WHERE session_id=? AND (status IN "
+                              "('waiting','ready','analyzing','clip_pending','clip_requested') OR (status='candidate' AND created_at>?))",
+                              (self.sid, db.now() - REVIEW_S)).fetchone()[0]
         if need is not None: keep_from = min(keep_from, need - 1)
         for x in self.c.execute("SELECT * FROM live_segments WHERE session_id=? AND deleted=0 AND t_start+duration<?", (self.sid, keep_from)).fetchall():
             (self.dir / x["path"]).unlink(missing_ok=True)

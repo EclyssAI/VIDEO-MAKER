@@ -240,7 +240,13 @@ def monitor(c, user):
                       "live_ai_usd_per_month": L.get("live_ai_usd_per_month", 0)} if L else None,
             "claude": dict(zip(("state", "detail"), claude_live.status())), "streams": list_streams(c, user["id"]),
             # servidor de TESTE tocando arquivos locais como se fossem lives: a interface mostra isso explicitamente
-            "test_source": bool(os.environ.get("LIVE_SOURCE_OVERRIDE"))}
+            "test_source": bool(os.environ.get("LIVE_SOURCE_OVERRIDE")),
+            "mcp_last_use": _mcp_last_use(c, user["id"])}
+
+
+def _mcp_last_use(c, uid):
+    from .. import oauth
+    return oauth.last_use(c, uid)
 
 
 def preview(c, uid, stream_id):
@@ -414,3 +420,72 @@ def render_jobs(c, uid, status=None, limit=50):
          "cl.status AS clip_status, p.name AS project FROM jobs j LEFT JOIN clips cl ON cl.id=j.clip_id LEFT JOIN projects p ON p.id=j.project_id "
          "WHERE j.user_id=? AND j.type='render'" + (" AND j.status=?" if status else "") + " ORDER BY j.created_at DESC LIMIT ?")
     return [dict(r) for r in c.execute(q, (uid, *([status] if status else []), max(1, min(int(limit), 200))))]
+
+
+# ---------------- revisão pelo Claude do CLIENTE via MCP (sem API do Claude no servidor) ----------------
+def _grab_frame(seg_path, offset, width=512):
+    # mesmo método do agente: seek na saída (segmentos .ts começam em PTS≈1,4 s)
+    r = subprocess.run(["ffmpeg", "-v", "error", "-i", str(seg_path), "-ss", f"{max(0, offset):.2f}", "-frames:v", "1", "-vf", f"scale={width}:-2",
+                        "-q:v", "5", "-f", "image2", "-c:v", "mjpeg", "-"], capture_output=True, timeout=30)
+    return r.stdout if r.returncode == 0 and r.stdout else None
+
+
+def evidence_frames(c, uid, moment_id, n=3):
+    """Frames REAIS do momento para o Claude do cliente: reaproveita os já registrados; senão extrai do buffer da sessão
+    (só enquanto os blocos existem) e registra cada um em live_frames com SHA-256 — fica a prova do que foi mostrado."""
+    import hashlib
+    m = c.execute("SELECT * FROM live_moments WHERE id=? AND user_id=?", (moment_id, uid)).fetchone()
+    if not m: raise LiveError("Momento não encontrado.", 404)
+    have = c.execute("SELECT * FROM live_frames WHERE moment_id=? AND user_id=? ORDER BY t_stream", (moment_id, uid)).fetchall()
+    if have: return [dict(f) for f in have]
+    s = c.execute("SELECT * FROM live_sessions WHERE id=? AND user_id=?", (m["session_id"], uid)).fetchone()
+    sdir = store.session_dir(uid, s["id"]); (sdir / "frames").mkdir(parents=True, exist_ok=True); out = []
+    for t in {1: [m["peak"]], 2: [m["peak"] - 1.5, m["peak"] + 1.5], 3: [m["peak"] - 3, m["peak"], m["peak"] + 2.5]}[max(1, min(n, 3))]:
+        seg = c.execute("SELECT * FROM live_segments WHERE session_id=? AND deleted=0 AND duration>0 AND t_start<=? AND t_start+duration>? "
+                        "ORDER BY seq LIMIT 1", (s["id"], t, t)).fetchone()
+        f = sdir / seg["path"] if seg else None
+        data = _grab_frame(f, min(t - seg["t_start"], seg["duration"] - 0.6)) if f and f.exists() else None
+        if not data: continue
+        fid = db.new_id("frm"); p = sdir / "frames" / f"{fid}.jpg"; p.write_bytes(data); sha = hashlib.sha256(data).hexdigest()
+        c.execute("INSERT INTO live_frames VALUES(?,?,?,?,?,?,?,?)", (fid, s["id"], uid, moment_id, round(t, 2), str(p.relative_to(db.DATA)), sha, db.now()))
+        out.append({"id": fid, "session_id": s["id"], "moment_id": moment_id, "t_stream": round(t, 2), "path": str(p.relative_to(db.DATA)), "sha256": sha})
+    if out: store.event(c, s, "frames_shared", {"moment_id": moment_id, "frames": [{"id": x["id"], "t": x["t_stream"], "sha256": x["sha256"]} for x in out],
+                                                "via": "mcp"}, m["peak"])
+    return out
+
+
+REVIEWABLE = ("candidate", "rejected", "skipped", "invalid", "ready")
+
+
+def review_moment(c, uid, moment_id, decision, confidence, start_t=None, end_t=None, screen_title="", title="", reason="", summary="", client=""):
+    """Decisão do Claude do cliente (via MCP) sobre um momento detectado. Mesma validação usada para a IA no servidor:
+    corte entre 5 e 60 s dentro da janela do momento. "clip" manda o trecho para o motor de render; "skip" descarta."""
+    from . import claude_live
+    m = c.execute("SELECT * FROM live_moments WHERE id=? AND user_id=?", (moment_id, uid)).fetchone()
+    if not m: raise LiveError("Momento não encontrado.", 404)
+    s = store.get_session(c, uid, m["session_id"])
+    if m["clip_id"]: raise LiveError("Este momento já virou corte.", 409)
+    if m["status"] not in REVIEWABLE: raise LiveError(f"Momento em estado '{m['status']}': não pode ser revisado agora.", 409)
+    if decision not in ("clip", "skip"): raise LiveError("decision deve ser 'clip' ou 'skip'.")
+    d = {"decision": decision, "confidence": num(confidence, "Confiança"), "start_t": num(start_t if start_t is not None else m["w_start"], "Início"),
+         "end_t": num(end_t if end_t is not None else m["w_end"], "Fim"), "screen_title": str(screen_title or "MOMENTO DA LIVE")[:60],
+         "title": str(title or screen_title or "")[:120], "reason": str(reason)[:600], "summary": str(summary)[:600], "events": []}
+    try: d = claude_live.validate(d, (m["w_start"], m["w_end"]))
+    except claude_live.InvalidDecision as e: raise LiveError(f"Decisão inválida: {e}")
+    if decision == "clip":
+        if s["status"] not in ("running", "reconnecting"): raise LiveError("A sessão precisa estar gravando (o trecho fica no buffer do agente).", 409)
+        u = c.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone(); q = plans.live_quota_left(c, u) if u else None
+        if not q or q[1] <= 0: raise LiveError("Franquia de cortes do Live Monitor deste mês esgotada.", 402)
+    d["by"] = "claude_mcp"; d["client"] = str(client)[:80]
+    new = "clip_requested" if decision == "clip" else "rejected"
+    n = c.execute(f"UPDATE live_moments SET status=?, decision=?, source=?, error='', updated_at=? WHERE id=? AND clip_id='' AND status IN {REVIEWABLE}",
+                  (new, json.dumps(d, ensure_ascii=False), "claude_mcp", db.now(), moment_id)).rowcount  # compare-and-set
+    if not n: raise LiveError("Este momento acabou de mudar de estado. Consulte de novo.", 409)
+    frames = [{"id": f["id"], "t": f["t_stream"], "wall": None, "sha256": f["sha256"]}
+              for f in c.execute("SELECT * FROM live_frames WHERE moment_id=? ORDER BY t_stream", (moment_id,))]
+    eid = store.event(c, s, "analysis", {"moment_id": moment_id, "decision": d["decision"], "confidence": d["confidence"], "start_t": d["start_t"],
+                                         "end_t": d["end_t"], "screen_title": d["screen_title"], "reason": d["reason"], "summary": d["summary"],
+                                         "events": [], "frames": frames, "will_clip": decision == "clip", "via": "mcp", "client": d["client"]}, m["peak"])
+    store.update_session(c, s["id"], last_analysis_id=eid)
+    return {"moment_id": moment_id, "status": new, "decision": d, "next": "O agente cria o corte quando o trecho estiver gravado; acompanhe com list_render_jobs."
+            if decision == "clip" else "Momento descartado."}

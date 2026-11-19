@@ -278,3 +278,79 @@ def test_mcp_ferramentas_auth_isolamento_e_limites(st):
     assert a.post("/api/tokens", json={"name": "x", "scopes": ["live:read"], "days": 999}, headers=H).status_code == 400
     with db(st) as x:
         assert x.execute("SELECT COUNT(*) FROM api_tokens WHERE token_hash LIKE 'cak_%'").fetchone()[0] == 0  # só hash no banco
+
+
+# ------------------------------------------------------------------------------------------------ OAuth (conector do Claude do cliente)
+def _pkce():
+    import base64, hashlib, secrets
+    v = secrets.token_urlsafe(48); ch = base64.urlsafe_b64encode(hashlib.sha256(v.encode()).digest()).rstrip(b"=").decode()
+    return v, ch
+
+
+def test_oauth_conector_do_claude_fluxo_completo(st):
+    """Mesmo fluxo de um conector personalizado do claude.ai: descoberta → registro dinâmico → /authorize com PKCE →
+    consentimento do usuário logado → /token → MCP com Bearer → refresh com rotação → desconexão."""
+    from urllib.parse import urlparse, parse_qs
+    base = st["base"]; u = user(st, "oauth@mon.com", "creator"); connect(u, "canal_oauth")
+    asm = httpx.get(base + "/.well-known/oauth-authorization-server").json()
+    prm = httpx.get(base + "/.well-known/oauth-protected-resource/mcp").json()
+    assert prm["resource"].rstrip("/") == base + "/mcp" and asm["issuer"].rstrip("/") == base
+    assert asm["code_challenge_methods_supported"] == ["S256"] and "registration_endpoint" in asm
+    assert "refresh_token" in asm["grant_types_supported"]
+    # sem token, o /mcp responde 401 apontando para os metadados do recurso
+    r = httpx.post(base + "/mcp", json={}, headers={"accept": "application/json, text/event-stream"})
+    assert r.status_code == 401 and "resource_metadata" in r.headers.get("www-authenticate", "")
+    cb = "https://claude.ai/api/mcp/auth_callback"
+    reg = httpx.post(asm["registration_endpoint"], json={"client_name": "Claude", "redirect_uris": [cb], "token_endpoint_auth_method": "none",
+                                                         "grant_types": ["authorization_code", "refresh_token"], "response_types": ["code"]})
+    assert reg.status_code in (200, 201), reg.text; cid = reg.json()["client_id"]
+    assert httpx.post(asm["registration_endpoint"], json={"client_name": "x", "redirect_uris": ["http://evil.example/cb"],
+                                                          "token_endpoint_auth_method": "none"}).status_code == 400  # http fora de localhost
+
+    def authorize(scope="live:read live:control clips:read clips:write", redirect=cb):
+        v, ch = _pkce()
+        r = httpx.get(asm["authorization_endpoint"], params={"response_type": "code", "client_id": cid, "redirect_uri": redirect, "state": "est123",
+                      "code_challenge": ch, "code_challenge_method": "S256", "scope": scope, "resource": base + "/mcp"})
+        return v, r
+    v, r = authorize()
+    assert r.status_code == 302 and "/conectar-claude?req=" in r.headers["location"], (r.status_code, r.text[:200])
+    rid = parse_qs(urlparse(r.headers["location"]).query)["req"][0]
+    # consentimento: sem login → 401; logado → mostra cliente, domínio e escopos
+    assert httpx.get(f"{base}/api/oauth/requests/{rid}").status_code == 401
+    info = u.get(f"/api/oauth/requests/{rid}").json()
+    assert info["client_name"] == "Claude" and info["redirect_host"] == "claude.ai" and info["verified_host"] is True and len(info["scopes"]) == 4
+    red = u.post(f"/api/oauth/requests/{rid}", json={"approve": True}, headers=H).json()["redirect"]
+    q = parse_qs(urlparse(red).query); assert red.startswith(cb) and q["state"] == ["est123"]; code = q["code"][0]
+    assert u.post(f"/api/oauth/requests/{rid}", json={"approve": True}, headers=H).status_code == 404  # pedido de uso único
+    bad = httpx.post(asm["token_endpoint"], data={"grant_type": "authorization_code", "code": code, "redirect_uri": cb, "client_id": cid, "code_verifier": "errado" * 8})
+    assert bad.status_code == 400  # PKCE errado
+    tk = httpx.post(asm["token_endpoint"], data={"grant_type": "authorization_code", "code": code, "redirect_uri": cb, "client_id": cid,
+                                                 "code_verifier": v, "resource": base + "/mcp"})
+    assert tk.status_code == 200, tk.text; tk = tk.json()
+    assert tk["token_type"].lower() == "bearer" and tk["expires_in"] == 3600 and tk["refresh_token"].startswith("car_")
+    assert httpx.post(asm["token_endpoint"], data={"grant_type": "authorization_code", "code": code, "redirect_uri": cb, "client_id": cid,
+                                                   "code_verifier": v}).status_code == 400  # código já usado
+    res = asyncio.run(mcp_calls(st, tk["access_token"], [("list_connected_streamers", {})]))[0]
+    assert not res["error"] and json.loads(res["text"])["streams"][0]["channel"] == "canal_oauth"  # age só na conta de quem autorizou
+    names = asyncio.run(mcp_calls(st, tk["access_token"], "list")); assert "review_moment" in names
+    # refresh com rotação: o par antigo deixa de valer
+    rf = httpx.post(asm["token_endpoint"], data={"grant_type": "refresh_token", "refresh_token": tk["refresh_token"], "client_id": cid}).json()
+    assert rf["access_token"] != tk["access_token"]
+    assert httpx.post(asm["token_endpoint"], data={"grant_type": "refresh_token", "refresh_token": tk["refresh_token"], "client_id": cid}).status_code == 400
+    hdr = lambda t: {"Authorization": f"Bearer {t}", "content-type": "application/json", "accept": "application/json, text/event-stream"}
+    assert httpx.post(base + "/mcp", headers=hdr(tk["access_token"]), json={}).status_code == 401
+    assert not asyncio.run(mcp_calls(st, rf["access_token"], [("list_connected_streamers", {})]))[0]["error"]
+    # conexão aparece na conta e pode ser desconectada; o token para de funcionar na hora
+    conns = u.get("/api/oauth/connections").json()["connections"]; assert len(conns) == 1 and conns[0]["client_name"] == "Claude"
+    other = user(st, "oauth-outro@mon.com", "creator")
+    assert other.delete(f"/api/oauth/connections/{conns[0]['id']}", headers=H).status_code == 404  # isolamento
+    assert u.delete(f"/api/oauth/connections/{conns[0]['id']}", headers=H).status_code == 200
+    assert httpx.post(base + "/mcp", headers=hdr(rf["access_token"]), json={}).status_code == 401
+    # recusa e domínio não confiável
+    v2, r2 = authorize(redirect=cb); rid2 = parse_qs(urlparse(r2.headers["location"]).query)["req"][0]
+    den = u.post(f"/api/oauth/requests/{rid2}", json={"approve": False}, headers=H).json()["redirect"]
+    assert "error=access_denied" in den and "state=est123" in den and "code=" not in den
+    assert httpx.get(asm["authorization_endpoint"], params={"response_type": "code", "client_id": cid, "redirect_uri": "https://evil.example/cb",
+                     "code_challenge": "x" * 43, "code_challenge_method": "S256"}).status_code == 400  # redirect não registrado
+    with db(st) as x:
+        assert x.execute("SELECT COUNT(*) FROM oauth_tokens WHERE token_hash LIKE 'ca%_%'").fetchone()[0] == 0  # só hashes

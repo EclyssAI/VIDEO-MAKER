@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 import contextlib
-from . import db, auth, plans, billing, copywriter, mcp_server, legal
+from . import db, auth, plans, billing, copywriter, mcp_server, legal, oauth
 from .worker import enqueue
 from .live.api import router as live_router
 from .live import claude_live
@@ -205,6 +205,39 @@ async def delete_me(request: Request):
     # um render ou agente que já estava no meio pode recriar a pasta: nova limpeza depois que eles percebem a exclusão
     threading.Timer(180, lambda: shutil.rmtree(d, ignore_errors=True)).start()
     r = JSONResponse({"deleted": True}); r.delete_cookie(auth.COOKIE, path="/"); return r
+
+
+# ---------- conexão do Claude do cliente (consentimento OAuth do MCP) ----------
+@app.get("/api/oauth/requests/{rid}")
+def oauth_request(rid: str, request: Request):
+    with db.conn() as c:
+        current_user(c, request); r = oauth.pending(c, rid)
+        if not r: raise HTTPException(404, "Pedido de conexão expirado ou inválido. Volte ao Claude e tente conectar de novo.")
+        return {k: v for k, v in r.items() if k != "params"}
+
+
+@app.post("/api/oauth/requests/{rid}")
+async def oauth_decide(rid: str, request: Request):
+    b = await body(request)
+    with db.conn() as c:
+        u = current_user(c, request)
+        if b.get("approve") is True: require_terms(c, u)
+        url = oauth.decide(c, rid, u["id"], b.get("approve") is True)
+        if not url: raise HTTPException(404, "Pedido de conexão expirado ou inválido.")
+        return {"redirect": url}
+
+
+@app.get("/api/oauth/connections")
+def oauth_connections(request: Request):
+    with db.conn() as c:
+        u = current_user(c, request); return {"connections": oauth.connections(c, u["id"]), "mcp_url": f"{mcp_server.PUBLIC_URL}/mcp"}
+
+
+@app.delete("/api/oauth/connections/{family}")
+def oauth_disconnect(family: str, request: Request):
+    with db.conn() as c:
+        if not oauth.disconnect(c, current_user(c, request)["id"], family): raise HTTPException(404, "Conexão não encontrada.")
+    return {"ok": True}
 
 
 @app.get("/api/public/plans")
@@ -483,6 +516,7 @@ def spa(path: str, request: Request):
 
 
 MAX_BODY = int(os.environ.get("MAX_JSON_BODY", str(256 * 1024)))
+OAUTH_PATHS = {"/authorize", "/token", "/register", "/revoke"}  # servidor de autorização OAuth do SDK MCP (conector do Claude)
 _UPLOAD = re.compile(r"^/api/projects/[^/]+/source$")
 
 
@@ -496,7 +530,7 @@ class _Router:
 
     async def __call__(self, scope, receive, send):
         p = scope.get("path", "") if scope["type"] in ("http", "websocket") else ""
-        if p == "/mcp" or p.startswith("/mcp/") or p.startswith("/.well-known/oauth-protected-resource"):
+        if p == "/mcp" or p.startswith("/mcp/") or p.startswith("/.well-known/oauth-") or p in OAUTH_PATHS:
             return await self.mcp(scope, receive, send)
         if scope["type"] != "http" or _UPLOAD.match(p) or scope.get("method") in ("GET", "HEAD"):
             return await self.web(scope, receive, send)

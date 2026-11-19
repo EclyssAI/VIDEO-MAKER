@@ -23,7 +23,7 @@ def port():
 def st():
     data = pathlib.Path(tempfile.mkdtemp(prefix="vm-live-")); p = port(); fake = FakeClaude(usage=(2500, 500))
     env = {**os.environ, "VM_DATA_DIR": str(data), "BETA_SIGNUP": "1", "COOKIE_SECURE": "0", "PUBLIC_URL": f"http://127.0.0.1:{p}",
-           "ANTHROPIC_API_KEY": "sk-ant-SIMULADO-nao-e-chave-real", "VM_ANTHROPIC_BASE_URL": fake.url,
+           "ANTHROPIC_API_KEY": "sk-ant-SIMULADO-nao-e-chave-real", "VM_ANTHROPIC_BASE_URL": fake.url, "LIVE_CLAUDE_ENABLED": "1",  # caminho opcional (desligado por padrão)
            "LIVE_SOURCE_OVERRIDE": str(MEDIA / "vod.mp4"), "LIVE_SEGMENT_S": "5", "LIVE_PRE_S": "6", "LIVE_POST_S": "4",
            "LIVE_COOLDOWN_S": "8", "LIVE_AUDIO_DB": "3", "LIVE_MIN_CALL_INTERVAL_S": "0", "LIVE_LEASE_S": "8", "LIVE_OFFLINE_S": "60",
            "VM_LEASE_S": "30", "LIVE_SSE_MAX_S": "60"}
