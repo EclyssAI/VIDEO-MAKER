@@ -30,19 +30,20 @@ def call_cost(model, out):
 
 
 def main():
-    runs = {k: load(k) for k in ("fixture_3", "fixture_10", "real_3", "real_10")}
+    runs = {k: load(k) for k in ("fixture_3", "fixture_10", "fixture_10_v2", "real_3", "real_10")}
     print("## Medições (valores do JSON de cada rodada)\n")
     print("| Rodada | Tipo | CPU agente (núcleos, média / p95) | Núcleos por transmissão | CPU máquina (média) | RAM agente (média / máx) | Banda por transmissão | Buffer máx | Atraso de processamento p50 / p95 / máx | Detecção evento→candidato p50 / máx | Transcrito | Candidatos/h por transmissão | Cortes pedidos → prontos | Render (s) | Recuperação pós-SIGKILL |")
     print("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
     for k, r in runs.items():
         if not r: print(f"| {k} | — | não executada | | | | | | | | | | | | |"); continue
         lag, det, rec, ren = r["processing_lag_s"], r["detection_latency_s"], r["recovery"], r["render"]
-        print(f"| {r['streams']} transmissões | {r['evidence_type']} | {r['cpu_cores_agent']['mean']} / {r['cpu_cores_agent']['p95']} | {r['cpu_cores_per_stream']} | "
+        tag = " (v1, antes da otimização)" if k == "fixture_10" else " (v2)" if k.endswith("_v2") or k == "real_10" else ""
+        print(f"| {r['streams']} transmissões{tag} | {r['evidence_type']} | {r['cpu_cores_agent']['mean']} / {r['cpu_cores_agent']['p95']} | {r['cpu_cores_per_stream']} | "
               f"{r['machine_cpu_pct_mean']}% de {r['machine']['cpus']} vCPU | {r['rss_mb_agent']['mean']} / {r['rss_mb_agent']['max']} MB | {r.get('input_mbps_per_stream')} Mbps "
               f"({r.get('input_gb_per_stream_hour')} GB/h) | {r['buffer_mb_max']} MB | {lag['p50']} / {lag['p95']} / {lag['max']} s | {det['p50']} / {det['max']} s (n={det['n']}) | "
               f"{round(r['transcribed_fraction'] * 100)}% | {r['candidates_per_stream_hour']} | {ren['requested']} → {ren['ready']} (falhas {ren['failed']}) | "
               f"{', '.join(str(x) for x in ren['render_s']) or '—'} | {rec['resumed_sessions']}/{r['streams']} retomadas em {rec['resume_after_kill_s']} s; buracos: {rec['gaps_after_recovery'] or 'nenhum'} |")
-    base = runs.get("real_10") or runs.get("fixture_10") or runs.get("real_3") or runs.get("fixture_3")
+    base = runs.get("real_10") or runs.get("fixture_10_v2") or runs.get("real_3") or runs.get("fixture_3")
     if not base: return
     mach_cores_stream = base["machine_cpu_pct_mean"] / 100 * base["machine"]["cpus"] / base["streams"]
     cand_h = max(r["candidates_per_stream_hour"] for r in runs.values() if r)

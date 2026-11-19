@@ -17,7 +17,9 @@ def port():
 def st():
     data = pathlib.Path(tempfile.mkdtemp(prefix="vm-mon-")); p = port()
     env = {**os.environ, "VM_DATA_DIR": str(data), "BETA_SIGNUP": "1", "COOKIE_SECURE": "0", "PUBLIC_URL": f"http://127.0.0.1:{p}",
-           "LIVE_CAPACITY_TOTAL": "100", "SIGNUP_PER_IP_HOUR": "100", "MCP_RATE_WRITE": "8", "MCP_RATE_READ": "200"}
+           "LIVE_CAPACITY_TOTAL": "100", "LIVE_CAPACITY_BETA": "100",
+           # sem agente neste teste: o override pula a consulta à Twitch no início (canais fictícios)
+           "LIVE_SOURCE_OVERRIDE": "/sem-agente-neste-teste", "SIGNUP_PER_IP_HOUR": "100", "MCP_RATE_WRITE": "8", "MCP_RATE_READ": "200"}
     env.pop("ANTHROPIC_API_KEY", None)
     for k in ("NO_PROXY", "no_proxy"): env[k] = env.get(k, "") + ",127.0.0.1"
     web = subprocess.Popen([sys.executable, "-m", "uvicorn", "web.app:app", "--port", str(p)], cwd=ROOT, env=env,
@@ -167,6 +169,9 @@ def test_aceite_dos_termos_versionado(st):
     assert connect(c, "precisa_aceite").status_code == 428
     assert c.post("/api/projects", json={"filename": "a.mp4", "size": 10}, headers=H).status_code == 428
     assert c.post("/api/tokens", json={"name": "t", "scopes": ["live:read"]}, headers=H).status_code == 428
+    assert c.post("/api/live/sessions/qualquer/clips", json={"start_t": 0, "end_t": 10}, headers=H).status_code == 428
+    assert c.patch("/api/clips/qualquer", json={"title": "x"}, headers=H).status_code == 428
+    assert c.post("/api/clips/qualquer/approve", headers=H).status_code == 428
     assert c.post("/api/legal/accept", json={"terms_version": "x", "privacy_version": "y"}, headers=H).status_code == 409
     t = me["terms"]; r = c.post("/api/legal/accept", json={"terms_version": t["terms_version"], "privacy_version": t["privacy_version"]}, headers=H)
     assert r.status_code == 200 and r.json()["required"] is False
@@ -187,6 +192,10 @@ def test_paginas_juridicas_publicas_e_links(st):
 # ------------------------------------------------------------------------------------------------ direitos do titular
 def test_exportar_e_excluir_conta(st):
     c = user(st, "apagar@mon.com", "creator"); connect(c, "canal_apagar")
+    with db(st) as x:
+        uid = x.execute("SELECT id FROM users WHERE email='apagar@mon.com'").fetchone()[0]
+        x.execute("INSERT INTO usage(user_id, month, live_s) VALUES(?,?,60)", (uid, time.strftime("%Y-%m", time.gmtime())))
+        x.execute("INSERT INTO jobs(id,user_id,type,status,created_at,updated_at) VALUES('job_x',?,'render','running',?,?)", (uid, time.time(), time.time()))
     ex = c.get("/api/me/export"); assert ex.status_code == 200
     d = ex.json(); assert d["account"]["email"] == "apagar@mon.com" and d["live_streams"][0]["channel"] == "canal_apagar"
     assert "pw_hash" not in ex.text and "token_hash" not in ex.text
@@ -196,6 +205,9 @@ def test_exportar_e_excluir_conta(st):
         assert x.execute("SELECT COUNT(*) FROM users WHERE email='apagar@mon.com'").fetchone()[0] == 0
         assert x.execute("SELECT COUNT(*) FROM live_streams WHERE channel='canal_apagar'").fetchone()[0] == 0
         assert x.execute("SELECT COUNT(*) FROM terms_acceptances WHERE user_id NOT IN (SELECT id FROM users)").fetchone()[0] == 0
+        assert x.execute("SELECT COUNT(*) FROM usage WHERE user_id=?", (uid,)).fetchone()[0] == 0
+        assert x.execute("SELECT COUNT(*) FROM jobs WHERE user_id=?", (uid,)).fetchone()[0] == 0
+        assert x.execute("SELECT COUNT(*) FROM access_logs WHERE user_id=?", (uid,)).fetchone()[0] >= 1  # Marco Civil: fica 6 meses
     assert c.get("/api/me").status_code == 401
 
 

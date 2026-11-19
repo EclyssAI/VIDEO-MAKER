@@ -115,7 +115,8 @@ def context(sid: str, request: Request, seconds: float = 120):
 async def clip(sid: str, request: Request):
     b = await body(request)
     with db.conn() as c:
-        mid = call(service.request_clip, c, user_of(c, request)["id"], sid, b.get("moment_id"), b.get("start_t"), b.get("end_t"))
+        u = user_of(c, request); terms_ok(c, u)
+        mid = call(service.request_clip, c, u["id"], sid, b.get("moment_id"), b.get("start_t"), b.get("end_t"))
         return {"moment_id": mid, "status": "clip_requested"}
 
 

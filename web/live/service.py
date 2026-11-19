@@ -70,6 +70,24 @@ def limits_for(user):
 
 RIGHTS = {"owner": "Sou o titular do canal", "authorized": "Tenho autorização do titular do canal para gerar cortes"}
 CAPACITY_TOTAL = int(os.environ.get("LIVE_CAPACITY_TOTAL", "10"))  # sessões ativas no servidor inteiro (medido em docs/CAPACIDADE_E_CUSTOS.md)
+CAPACITY_BETA = int(os.environ.get("LIVE_CAPACITY_BETA", "2"))     # contas sem assinatura (Beta) não ocupam a capacidade dos pagantes
+STARTS_PER_HOUR = int(os.environ.get("LIVE_STARTS_PER_HOUR", "30"))  # inícios de sessão por usuário por hora (anti-abuso)
+_starts, _starts_lock = {}, threading.Lock()
+
+
+def _start_allowed(uid):
+    now = time.time()
+    with _starts_lock:
+        v = [t for t in _starts.get(uid, []) if now - t < 3600]
+        if len(v) >= STARTS_PER_HOUR: return False
+        _starts[uid] = v + [now]
+        if len(_starts) > 20000: _starts.clear()
+        return True
+
+
+def _beta_active(c):
+    return c.execute(f"""SELECT COUNT(*) FROM live_sessions s JOIN users u ON u.id=s.user_id WHERE s.status IN {store.ACTIVE}
+        AND NOT (u.plan IN ('creator','studio') AND u.plan_status IN ('active','past_due','canceled') AND u.plan_until > ?)""", (db.now(),)).fetchone()[0]
 
 
 def _tx(c):
@@ -91,15 +109,16 @@ def connect_stream(c, user, channel, rights_basis=None, platform="twitch"):
     _tx(c)
     try:
         hit = c.execute("SELECT * FROM live_streams WHERE user_id=? AND platform=? AND channel=?", (user["id"], platform, ch)).fetchone()
-        if hit:
-            c.execute("COMMIT"); return stream_out(c, hit)
-        used = [r[0] for r in c.execute("SELECT slot FROM live_streams WHERE user_id=? ORDER BY slot", (user["id"],))]
-        if len(used) >= L["live_slots"]:
-            raise LiveError(f"Seu plano {L['label']} permite até {L['live_slots']} transmissão(ões) conectada(s). Remova uma para conectar outra.", 403)
-        slot = next(k for k in range(1, L["live_slots"] + 1) if k not in used)
-        t = db.now(); sid = db.new_id("str")
-        c.execute("INSERT INTO live_streams(id,user_id,platform,channel,slot,rights_basis,rights_attested_at,created_at,updated_at) "
-                  "VALUES(?,?,?,?,?,?,?,?,?)", (sid, user["id"], platform, ch, slot, rights_basis, t, t, t))
+        if hit:  # idempotente: o mesmo canal não ocupa outro slot
+            sid = hit["id"]
+        else:
+            used = [r[0] for r in c.execute("SELECT slot FROM live_streams WHERE user_id=? ORDER BY slot", (user["id"],))]
+            if len(used) >= L["live_slots"]:
+                raise LiveError(f"Seu plano {L['label']} permite até {L['live_slots']} transmissão(ões) conectada(s). Remova uma para conectar outra.", 403)
+            slot = next(k for k in range(1, L["live_slots"] + 1) if k not in used)
+            t = db.now(); sid = db.new_id("str")
+            c.execute("INSERT INTO live_streams(id,user_id,platform,channel,slot,rights_basis,rights_attested_at,created_at,updated_at) "
+                      "VALUES(?,?,?,?,?,?,?,?,?)", (sid, user["id"], platform, ch, slot, rights_basis, t, t, t))
         c.execute("COMMIT")
     except Exception:
         c.execute("ROLLBACK"); raise
@@ -132,6 +151,13 @@ def start_stream(c, user, stream_id, budget_usd=None, max_minutes=None, lang="au
     minutes = min(num(max_minutes if max_minutes is not None else L["live_max_minutes"], "Duração"), L["live_max_minutes"], hours_left * 60)
     if budget < 0 or minutes < 1: raise LiveError("Orçamento ou duração inválidos.")
     conf = min(max(num(min_confidence, "Confiança"), 0), 1)
+    if c.execute(f"SELECT 1 FROM live_sessions WHERE stream_id=? AND status IN {store.ACTIVE}", (stream_id,)).fetchone():
+        raise LiveError("Esta transmissão já está sendo monitorada.", 409)
+    if not _start_allowed(user["id"]): raise LiveError("Muitos inícios de monitoramento na última hora. Aguarde.", 429)
+    if not os.environ.get("LIVE_SOURCE_OVERRIDE"):  # só monitora canal realmente ao vivo (não ocupa capacidade à toa)
+        chk = channel_status(st["channel"])
+        if not chk.get("live"): raise LiveError(chk.get("error") or "Este canal não está ao vivo agora.", 409)
+    beta = plans.effective_plan(user) == "beta"
     _tx(c)
     try:
         if st["slot"] > L["live_slots"]:
@@ -140,6 +166,8 @@ def start_stream(c, user, stream_id, budget_usd=None, max_minutes=None, lang="au
             raise LiveError("Esta transmissão já está sendo monitorada.", 409)
         if _active_count(c, user["id"]) >= L["live_slots"]:
             raise LiveError(f"Limite do plano {L['label']}: {L['live_slots']} transmissão(ões) monitorada(s) ao mesmo tempo.", 403)
+        if beta and _beta_active(c) >= CAPACITY_BETA:
+            raise LiveError("A capacidade reservada para contas Beta está ocupada. Tente mais tarde.", 503)
         if _active_count(c) >= CAPACITY_TOTAL:
             raise LiveError("Capacidade de monitoramento do servidor esgotada no momento. Tente novamente em alguns minutos.", 503)
         t = db.now(); sid = db.new_id("live"); pid = db.new_id("prj"); ch = st["channel"]

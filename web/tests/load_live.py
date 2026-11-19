@@ -93,7 +93,7 @@ def main():
         if len(channels) < a.streams: sys.exit(f"só {len(channels)} canais ao vivo encontrados")
     log = lambda name: open(data / f"{name}.log", "a")
     procs = {"web": subprocess.Popen([sys.executable, "-m", "uvicorn", "web.app:app", "--port", str(p)], cwd=ROOT, env=env, stdout=log("web"), stderr=subprocess.STDOUT),
-             "worker": subprocess.Popen([sys.executable, "-m", "web.worker"], cwd=ROOT, env=env, stdout=log("worker"), stderr=subprocess.STDOUT)}
+             "worker": subprocess.Popen(["nice", "-n", "10", sys.executable, "-m", "web.worker"], cwd=ROOT, env=env, stdout=log("worker"), stderr=subprocess.STDOUT)}
     start_agent = lambda: subprocess.Popen([sys.executable, "-m", "web.live.agent"], cwd=ROOT, env=env, stdout=log("agent"), stderr=subprocess.STDOUT)
     procs["agent"] = start_agent()
     for _ in range(60):

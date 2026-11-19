@@ -9,7 +9,7 @@ services:
     restart: unless-stopped
   worker:
     build: .
-    command: ["python", "-m", "web.worker"]
+    command: ["nice", "-n", "10", "python", "-m", "web.worker"]   # render em prioridade baixa (não atrasa o Live Agent)
     env_file: .env
     volumes: [vmdata:/data]
     restart: unless-stopped

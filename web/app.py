@@ -1,5 +1,5 @@
 """ClipeiAki (ex-VIDEO-MAKER) Web — API + interface + MCP. Rodar: uvicorn web.app:app  (o processamento roda em `python -m web.worker`)."""
-import asyncio, json, os, re, shutil, logging, unicodedata
+import asyncio, json, os, re, shutil, logging, threading, unicodedata
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -192,14 +192,18 @@ async def delete_me(request: Request):
     se houver assinatura — ver Política de Privacidade."""
     b = await body(request)
     with db.conn() as c:
-        u = current_user(c, request)
+        u = current_user(c, request); key = f"delete:{u['id']}"
+        if auth.throttled(key, limit=5, window=900): raise HTTPException(429, "Muitas tentativas. Aguarde alguns minutos.")
         if not await asyncio.to_thread(auth.check_pw, str(b.get("password", "")), u["pw_hash"]):
-            raise HTTPException(403, "Senha incorreta.")
+            auth.record_fail(key); raise HTTPException(403, "Senha incorreta.")
         c.execute("UPDATE live_sessions SET status='stopping', stop_reason='user', updated_at=? WHERE user_id=? AND status IN ('starting','running','reconnecting')",
                   (db.now(), u["id"]))
-        c.execute("UPDATE jobs SET status='canceled', updated_at=? WHERE user_id=? AND status='queued'", (db.now(), u["id"]))
+        c.execute("DELETE FROM jobs WHERE user_id=?", (u["id"],))  # inclusive em execução: o worker não acha mais o corte e desiste
+        c.execute("DELETE FROM usage WHERE user_id=?", (u["id"],))
         c.execute("DELETE FROM users WHERE id=?", (u["id"],))
-    shutil.rmtree(db.user_dir(u["id"]), ignore_errors=True)
+    d = db.user_dir(u["id"]); shutil.rmtree(d, ignore_errors=True)
+    # um render ou agente que já estava no meio pode recriar a pasta: nova limpeza depois que eles percebem a exclusão
+    threading.Timer(180, lambda: shutil.rmtree(d, ignore_errors=True)).start()
     r = JSONResponse({"deleted": True}); r.delete_cookie(auth.COOKIE, path="/"); return r
 
 
@@ -323,7 +327,7 @@ def get_project(pid: str, request: Request):
 @app.post("/api/projects/{pid}/retry")
 def retry_project(pid: str, request: Request):
     with db.conn() as c:
-        u = current_user(c, request); p = own_project(c, u["id"], pid)
+        u = current_user(c, request); require_terms(c, u); p = own_project(c, u["id"], pid)
         if p["status"] != "failed" or not (db.user_dir(u["id"]) / "projects" / pid / (p["source_file"] or "x")).exists():
             raise HTTPException(409, "Só é possível reprocessar projetos com falha que ainda têm o vídeo.")
         c.execute("UPDATE projects SET status='queued', error='', updated_at=? WHERE id=?", (db.now(), pid))
@@ -345,7 +349,7 @@ def delete_project(pid: str, request: Request):
 async def edit_clip(cid: str, request: Request):
     b = await body(request)
     with db.conn() as c:
-        u = current_user(c, request); x = own_clip(c, u["id"], cid); cp = json.loads(x["copy"])
+        u = current_user(c, request); require_terms(c, u); x = own_clip(c, u["id"], cid); cp = json.loads(x["copy"])
         if x["status"] in ("queued", "rendering"): raise HTTPException(409, "Aguarde a renderização atual terminar.")
         for k, n in (("screen_title", 40), ("title", 100), ("description", 2000)):
             if k in b: cp[k] = (str(b[k]) if k == "description" else one_line(b[k])).strip()[:n]
@@ -367,7 +371,9 @@ async def edit_clip(cid: str, request: Request):
 def clip_action(cid: str, action: str, request: Request):
     if action not in ("approve", "discard", "restore", "retry"): raise HTTPException(404)
     with db.conn() as c:
-        u = current_user(c, request); x = own_clip(c, u["id"], cid)
+        u = current_user(c, request)
+        if action in ("retry", "approve"): require_terms(c, u)
+        x = own_clip(c, u["id"], cid)
         if action == "retry":
             if x["status"] != "failed": raise HTTPException(409, "Este corte não está com falha.")
             c.execute("UPDATE clips SET status='queued', error='' WHERE id=?", (cid,)); enqueue(c, u["id"], "render", x["project_id"], cid)

@@ -214,7 +214,7 @@ def create_clip(session_id: str | None = None, stream_id: str | None = None, mom
     uid = principal("clips:write")
     if not moment_id and (start_t is None or end_t is None): raise ToolError("Informe moment_id ou start_t e end_t.")
     def go(c):
-        sid = service.resolve_session(c, uid, session_id, stream_id)
+        need_terms(c, uid); sid = service.resolve_session(c, uid, session_id, stream_id)
         return service.request_clip(c, uid, sid, moment_id, start_t, end_t)
     mid = run(go)
     return {"moment_id": mid, "status": "clip_requested", "next": "Acompanhe com list_render_jobs ou get_highlight(moment_id)."}
@@ -223,7 +223,10 @@ def create_clip(session_id: str | None = None, stream_id: str | None = None, mom
 @mcp.tool()
 def approve_clip(clip_id: str) -> dict:
     """Aprova um corte já renderizado (status ready) depois da revisão do usuário; libera o download na Biblioteca. Escopo clips:write."""
-    uid = principal("clips:write"); return run(lambda c: service.approve_clip(c, uid, clip_id))
+    uid = principal("clips:write")
+    def go(c):
+        need_terms(c, uid); return service.approve_clip(c, uid, clip_id)
+    return run(go)
 
 
 @mcp.tool(annotations=RO)

@@ -230,6 +230,8 @@ class Runner(threading.Thread):
             q = plans.live_quota_left(self.c, u) if u else None
             if q is None: return "plan"
             if q[0] <= 0: return "quota"
+            L = plans.limits(plans.effective_plan(u)); slot = self.c.execute("SELECT slot FROM live_streams WHERE id=?", (s["stream_id"],)).fetchone()
+            if L and slot and slot[0] > L["live_slots"]: return "plan"  # plano rebaixado: transmissões acima do novo limite param
         if s["recorded_s"] >= s["max_minutes"] * 60: return "duration"
         if s["budget_usd"] > 0 and s["spent_usd"] >= s["budget_usd"]: return "budget"  # orçamento 0 = sessão sem IA (não para)
         if s["calls"] >= s["max_calls"]: return "calls"
@@ -322,7 +324,8 @@ class Runner(threading.Thread):
         quiet = len(dbs) and excess < AUDIO_DB - 3
         # "events" (padrão): só transcreve blocos com pico de áudio (≥ EVENT_TRANSCRIBE_DB acima da mediana; padrão 6 dB);
         # janelas que vão para o Claude ou viram corte são transcritas sob demanda (ensure_words). "all": todo bloco.
-        if (s["transcribe_mode"] == "events" and excess < EVENT_TRANSCRIBE_DB) or (backlog >= 2 and quiet):
+        gate = AUDIO_DB if kf else EVENT_TRANSCRIBE_DB  # kf = agente com muitas sessões: transcreve só picos fortes
+        if (s["transcribe_mode"] == "events" and excess < gate) or (backlog >= 2 and quiet):
             raw_words, lang, transcribed = [], s["lang"], False
         else:
             raw_words, lang = transcribe(f, dur, None if s["lang"] == "auto" else s["lang"]); transcribed = True
@@ -447,6 +450,11 @@ class Runner(threading.Thread):
             if not self.c.execute("SELECT 1 FROM live_moments WHERE id=? AND clip_id='' AND status IN ('clip_pending','clip_requested')",
                                   (m["id"],)).fetchone():
                 self.c.execute("ROLLBACK"); tmp.unlink(missing_ok=True); return
+            q = plans.live_quota_left(self.c, u) if u else None  # rechecagem dentro da transação: sessões paralelas não estouram a franquia
+            if not q or q[1] <= 0:
+                self.c.execute("ROLLBACK"); tmp.unlink(missing_ok=True)
+                self.c.execute("UPDATE live_moments SET status='clip_failed', error=?, updated_at=? WHERE id=? AND clip_id=''",
+                               ("Franquia de cortes do mês esgotada.", db.now(), m["id"])); return
             tmp.replace(out)
             idx = (self.c.execute("SELECT MAX(idx) FROM clips WHERE project_id=?", (s["project_id"],)).fetchone()[0] or 0) + 1
             self.c.execute('INSERT INTO clips(id,user_id,project_id,idx,start,"end",peak,strength,data,copy,status,created_at,updated_at) '
@@ -606,19 +614,27 @@ class Analyzer(threading.Thread):
         store.event(c, s, "analysis_started", {"moment_id": m["id"], "frames_planned": n, "frames_t": [f[0] for f in frames],
                                                 "estimate_usd": est, "spent_before_usd": s["spent_usd"]}, m["peak"])
         store.update_session(c, self.sid, last_call_at=db.now(), claude_state="calling", claude_detail=claude_live.MODEL)
+        c.execute("BEGIN IMMEDIATE")  # reserva atômica do pior caso no teto mensal de IA
+        if plans.ai_left(c, u) < est:
+            c.execute("ROLLBACK")
+            c.execute("UPDATE live_moments SET status='candidate', error=?, updated_at=? WHERE id=? AND status='analyzing'",
+                      ("Orçamento mensal de IA do plano esgotado.", db.now(), m["id"])); return
+        plans.charge_ai(c, s["user_id"], est); c.execute("COMMIT")
         try:
             dec, meta = claude_live.analyze(frames, (m["w_start"], m["w_end"]), text, ctx, sig)
         except claude_live.ClaudeUnavailable as e:
+            plans.charge_ai(c, s["user_id"], -est)
             self.charge(0, 1)  # a requisição saiu do servidor; conta a chamada (custo desconhecido = 0)
             c.execute("UPDATE live_moments SET status='candidate', error=?, updated_at=? WHERE id=? AND status='analyzing'", (str(e), db.now(), m["id"]))
             store.update_session(c, self.sid, claude_state="error", claude_detail=str(e))
             store.event(c, s, "claude_error", {"moment_id": m["id"], "error": str(e)}, m["peak"]); return
         except claude_live.InvalidDecision as e:
-            meta = e.meta or {}
+            plans.charge_ai(c, s["user_id"], -est); meta = e.meta or {}
             if meta: self.charge(meta.get("cost_usd", 0), 1)
             c.execute("UPDATE live_moments SET status='invalid', error=?, updated_at=? WHERE id=? AND status='analyzing'", (str(e), db.now(), m["id"]))
             store.update_session(c, self.sid, claude_state="ok" if meta else "error", claude_detail=str(e))
             store.event(c, s, "analysis_invalid", {"moment_id": m["id"], "error": str(e), **meta}, m["peak"]); return
+        plans.charge_ai(c, s["user_id"], -est)  # devolve a reserva; o custo real entra abaixo
         self.charge(meta["cost_usd"], 1)  # gasto registrado assim que a API responde
         saved = []
         for (t, wall, data), sha in zip(frames, meta["frames_sha256"]):
