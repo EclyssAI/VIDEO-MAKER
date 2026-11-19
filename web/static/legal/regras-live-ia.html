@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark"><meta name="theme-color" content="#0b0b14">
+<title>Regras do Live Monitor, da IA e das Integrações · ClipeiAki</title>
+<meta name="description" content="Regras do Live Monitor, da IA e das Integrações do ClipeiAki (Eclyss).">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/site/legal.css">
+</head>
+<body>
+<a class="skip" href="#doc">Pular para o conteúdo</a>
+<header class="lhead"><a class="brand" href="/"><img src="/static/icon.svg" alt="" width="32" height="32">ClipeiAki</a><a class="btn" href="/entrar">Entrar</a></header>
+<div class="lwrap">
+<nav class="lnav" aria-label="Documentos jurídicos"><ul><li><a href="/termos">Termos de Uso</a></li><li><a href="/privacidade">Política de Privacidade</a></li><li><a href="/cancelamento">Cancelamento, Arrependimento e Reembolso</a></li><li><a href="/conteudo">Conteúdo e Direitos de Terceiros</a></li><li><a href="/cookies">Política de Cookies</a></li><li><a href="/regras-live-ia" aria-current="page">Regras do Live Monitor, IA e Integrações</a></li><li><a href="/contato">Contato, Suporte e Exclusão de Dados</a></li></ul></nav>
+<main id="doc" class="ldoc">
+<p class="notice-draft" role="note">Documento em validação jurídica antes da venda pública. Itens marcados como PENDENTE_DADO_EMPRESARIAL dependem dos dados da empresa.</p>
+<h1>Regras do Live Monitor, da IA e das Integrações</h1>
+<p class="ver">Versão 2026-11-19 · vigente desde 19/11/2026</p>
+
+<p class="lead">Como o Live Monitor funciona de verdade, o que a IA vê, limites técnicos e regras de uso das integrações.</p>
+
+<h2 id="r1">1. Quais transmissões podem ser conectadas</h2>
+<ul>
+  <li>Hoje: canais da <strong>Twitch</strong>. Outras plataformas estão em desenvolvimento e não estão disponíveis.</li>
+  <li>Só conecte canais <strong>seus</strong> ou de quem <strong>autorizou</strong> você a gerar cortes. A declaração é obrigatória e fica registrada com data.</li>
+  <li>O uso precisa respeitar os Termos de Serviço e as Diretrizes da Comunidade da Twitch. A Eclyss pode desconectar canais em caso de denúncia
+  procedente ou de mudança nas regras da plataforma.</li>
+</ul>
+
+<h2 id="r2">2. Como o monitoramento funciona</h2>
+<ol>
+  <li>Um processo no servidor da Eclyss (não o seu navegador) recebe a transmissão e grava blocos de 10 segundos.</li>
+  <li>Detectores locais medem cada bloco: volume do áudio, mudanças bruscas de imagem e palavras de reação na transcrição.</li>
+  <li>Trechos acima do normal viram <strong>momentos candidatos</strong>, com horário da transmissão.</li>
+  <li>Se a análise por IA estiver ativada, até 3 frames do momento e a transcrição da janela são enviados ao Claude (Anthropic), que devolve
+  uma decisão (cortar ou ignorar), confiança, início e fim propostos e uma justificativa. <strong>A IA não assiste à transmissão
+  continuamente</strong>: vê apenas o que foi enviado, e cada frame enviado aparece no painel com horário e SHA-256.</li>
+  <li>O motor de edição renderiza o corte; você revisa o preview e aprova antes de baixar.</li>
+</ol>
+<p>O monitoramento continua com a aba fechada. Cada sessão tem duração máxima e orçamento de IA; ao atingir um limite, a sessão para sozinha e o motivo aparece no painel.</p>
+
+<h2 id="r3">3. Limites do plano</h2>
+<p>Transmissões simultâneas (Creator: 3; Creator Studio: 10), horas de monitoramento e cortes por mês são aplicados pelo servidor. A capacidade
+total do servidor também é limitada: se estiver cheia, o início de novas sessões é recusado com aviso, sem cobrança extra.</p>
+
+<h2 id="r4">4. Limitações conhecidas</h2>
+<ul>
+  <li>Momentos silenciosos (piadas sem reação sonora, jogadas sem grito) podem não ser detectados.</li>
+  <li>Picos de áudio de música, alertas ou doações podem gerar candidatos sem interesse.</li>
+  <li>O enquadramento automático da webcam pode errar quando há sobreposições (chat, alertas) na tela.</li>
+  <li>A transcrição pode errar nomes, gírias e falas sobrepostas.</li>
+  <li>Quedas da transmissão: o agente tenta reconectar; se a live ficar offline por cerca de 3 minutos, a sessão é encerrada.</li>
+  <li>O preview é o último frame <em>gravado</em> pelo servidor, com alguns segundos de atraso em relação ao player ao vivo.</li>
+</ul>
+
+<h2 id="r5">5. Integração MCP (controle por chat)</h2>
+<ul>
+  <li>Você cria tokens pessoais em <em>Conta e plano</em>, escolhendo escopos (leitura, controle, cortes) e validade (até 1 ano).</li>
+  <li>O token é mostrado uma única vez; guardamos só o hash. Revogue imediatamente se ele vazar.</li>
+  <li>Há limite de requisições por token (padrão: 120 leituras e 20 ações por minuto).</li>
+  <li>Comandos enviados pelo cliente MCP (por exemplo, o Claude) agem em nome da sua conta e seguem as mesmas regras e limites do painel.
+  Conectar um canal por MCP também exige a declaração de direitos.</li>
+</ul>
+
+<h2 id="r6">6. Uso de IA de terceiros</h2>
+<p>Quando ativada, a análise usa a API da Anthropic. Os frames e trechos enviados são tratados conforme a <a href="/privacidade">Política de
+Privacidade</a> (inclusive a transferência internacional). O resultado da IA é uma sugestão: a decisão de publicar é sempre sua.</p>
+
+</main>
+</div>
+<footer class="lfoot"><p>ClipeiAki é um serviço da Eclyss. Não afiliado à Twitch, YouTube, TikTok, Meta, Anthropic, Rockstar Games ou Take-Two.</p>
+<p><a href="/termos">Termos</a> · <a href="/privacidade">Privacidade</a> · <a href="/cancelamento">Cancelamento e reembolso</a> · <a href="/conteudo">Conteúdo</a> ·
+<a href="/cookies">Cookies</a> · <a href="/regras-live-ia">Regras do Live Monitor e IA</a> · <a href="/contato">Contato</a></p></footer>
+</body>
+</html>

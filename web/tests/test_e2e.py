@@ -46,7 +46,7 @@ def client(st):
 
 
 def signup(st, email, name="Teste"):
-    c = client(st); r = c.post("/api/auth/signup", json={"email": email, "password": "senha-forte-123", "name": name}, headers=H)
+    c = client(st); r = c.post("/api/auth/signup", json={"email": email, "password": "senha-forte-123", "name": name, "accept_terms": True}, headers=H)
     assert r.status_code == 200, r.text; return c
 
 

@@ -1,5 +1,8 @@
-# Limites por plano do VIDEO-MAKER Web (SaaS). Valores iniciais — confirmar com a landing antes do lançamento.
-# minutes_per_month = minutos de vídeo enviados (soma das durações) no mês corrente.
+# Limites por plano do ClipeiAki (fonte única: backend, conta e landing leem daqui).
+# minutes_per_month = minutos de vídeo ENVIADOS (upload) no mês corrente.
+# live_slots = transmissões conectadas/monitoradas AO MESMO TEMPO (aplicado no backend, por conta).
+# live_hours_per_month / live_clips_per_month / live_ai_usd_per_month = franquias do Live Monitor. STATUS: PROPOSTA calculada a partir dos testes
+#   de carga (docs/CAPACIDADE_E_CUSTOS.md) — aguardando aprovação comercial antes da venda pública.
 plans:
   beta:            # acesso de demonstração (sem assinatura) — habilitado por BETA_SIGNUP=1
     label: "Beta"
@@ -13,6 +16,10 @@ plans:
     live_max_minutes: 30         # Claude Live Monitor: duração máxima por sessão
     live_budget_usd_max: 0.50    # teto do orçamento de IA por sessão
     live_max_calls: 30
+    live_slots: 1
+    live_hours_per_month: 2
+    live_clips_per_month: 10
+    live_ai_usd_per_month: 0.50   # PROPOSTA: teto de gasto com a API do Claude no mês
   creator:
     label: "Creator"
     price_brl: 49.90
@@ -25,6 +32,10 @@ plans:
     live_max_minutes: 120
     live_budget_usd_max: 2.00
     live_max_calls: 120
+    live_slots: 3
+    live_hours_per_month: 60
+    live_clips_per_month: 150
+    live_ai_usd_per_month: 2.00   # PROPOSTA: teto de gasto com a API do Claude no mês
   studio:
     label: "Creator Studio"
     price_brl: 69.90
@@ -37,3 +48,7 @@ plans:
     live_max_minutes: 240
     live_budget_usd_max: 5.00
     live_max_calls: 300
+    live_slots: 10
+    live_hours_per_month: 200
+    live_clips_per_month: 500
+    live_ai_usd_per_month: 4.00   # PROPOSTA: teto de gasto com a API do Claude no mês

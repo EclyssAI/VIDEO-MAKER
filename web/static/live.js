@@ -1,7 +1,8 @@
 "use strict";
 /* Claude Live Monitor — tudo aqui vem do backend (REST + SSE). Nada é simulado no navegador. */
 const LSTATUS = { starting: ["Iniciando", "run"], running: ["Gravando", "ok"], reconnecting: ["Reconectando", "warn"], stopping: ["Encerrando", "warn"], stopped: ["Encerrada", ""] };
-const STOPR = { user: "parada por você", duration: "limite de duração", budget: "orçamento esgotado", calls: "limite de chamadas", offline: "live offline", error: "erro no agente" };
+const STOPR = { user: "parada por você", duration: "limite de duração", budget: "orçamento esgotado", calls: "limite de chamadas", offline: "live offline", error: "erro no agente",
+  quota: "franquia mensal esgotada", plan: "plano inativo" };
 const CLAUDE = { disabled: ["Desconectado", "bad"], idle: ["Pronto, aguardando momento", "warn"], calling: ["Analisando agora", "run"], ok: ["Conectado", "ok"], error: ["Erro na API", "bad"] };
 const MSTATUS = { waiting: "Gravando o pós-evento", ready: "Na fila do Claude", analyzing: "Claude analisando", candidate: "Candidato (sem análise)", rejected: "Claude descartou",
   clip_pending: "Claude aprovou · cortando", clip_requested: "Corte solicitado", clip_queued: "Renderizando", clipped: "Corte pronto", clip_failed: "Falha no corte",
@@ -13,57 +14,102 @@ const usd = (v) => "US$ " + (v || 0).toFixed(v < 0.1 ? 4 : 2);
 function claudeChip(cl) { const [t, k] = CLAUDE[cl.state] || [cl.state, ""]; return `<span class="chip ${k}">Claude: ${esc(t)}</span>`; }
 
 function liveDashCard(sessions, me) {
-  const act = sessions.find((s) => s.status !== "stopped"); const cs = me.live_claude || {};
+  const act = sessions.filter((s) => s.status !== "stopped"); const cs = me.live_claude || {}; const slots = me.limits ? me.limits.live_slots : 0;
   const claude = cs.state === "ready" ? `<span class="chip ok">Claude API configurada</span>` : `<span class="chip bad">Claude desconectado</span>`;
-  const body = act ? `<div class="row"><span class="chip ${LSTATUS[act.status][1]}">${LSTATUS[act.status][0]}</span><strong>twitch.tv/${esc(act.channel)}</strong>
-      <span class="muted">${fmtT(act.recorded_s)} gravados · ${act.calls} análises · ${usd(act.spent_usd)}</span><span class="spacer"></span>
-      <a class="btn primary" href="/live/${esc(act.id)}" data-link>${icon("radio")}Abrir monitor</a></div>`
-    : `<div class="row"><p class="muted">Monitore uma live da Twitch: o agente grava, detecta momentos e o Claude analisa frames e falas reais para sugerir cortes.</p>
-      <span class="spacer"></span><a class="btn primary" href="/live" data-link>${icon("radio")}Iniciar monitoramento</a></div>`;
-  return `<section class="panel live-dash stack" aria-labelledby="ldh"><div class="row"><h2 id="ldh">Claude Live Monitor</h2><span class="spacer"></span>${claude}</div>
+  const body = `<div class="row"><p class="muted">${act.length ? `${act.length} de ${slots} transmissões sendo monitoradas agora.` : `Conecte até ${slots} transmissão(ões) da Twitch e acompanhe todas numa grade, com preview real de cada uma.`}</p>
+      <span class="spacer"></span><a class="btn primary" href="/live" data-link>${icon("radio")}Abrir Live Monitor</a></div>`;
+  return `<section class="panel live-dash stack" aria-labelledby="ldh"><div class="row"><h2 id="ldh">Live Monitor</h2><span class="spacer"></span>${claude}</div>
     ${cs.state === "ready" ? "" : `<p class="muted small">${esc(cs.detail || "")} A gravação e a detecção funcionam; a análise do Claude fica desativada até a chave ser configurada.</p>`}${body}</section>`;
 }
 
+/* estado da transmissão (vem do backend: service.stream_out) */
+const SSTATE = { live: ["Ao vivo · gravando", "ok"], starting: ["Iniciando", "run"], reconnecting: ["Reconectando", "warn"], stopping: ["Encerrando", "warn"],
+  offline: ["Offline", ""], error: ["Erro", "bad"], paused: ["Pausado", ""], limit: ["Limite atingido", "warn"], idle: ["Conectado · parado", ""] };
+const ACTIVE_ST = ["live", "starting", "reconnecting", "stopping"];
+const LCFG = () => { try { return JSON.parse(localStorage.getItem("lcfg") || "{}"); } catch { return {}; } };
+
+function streamCard(x, testSource) {
+  const [st, k] = SSTATE[x.state] || [x.state, ""]; const s = x.session; const active = ACTIVE_ST.includes(x.state);
+  const plat = testSource ? "Fonte de teste (arquivo local)" : "Twitch";
+  const pv = s && s.preview ? `<img src="${esc(s.preview.url)}" alt="Último frame gravado de ${esc(x.channel)}, t=${fmtT(s.preview.t_stream)}" loading="lazy">
+      <span class="pv-meta">frame gravado · t=${fmtT(s.preview.t_stream)} · ${clock(s.preview.wall_at)}</span>`
+    : `<div class="pv-empty">${active ? "Aguardando o primeiro bloco gravado…" : "Sem preview: a transmissão não está sendo gravada"}</div>`;
+  const stats = s ? `<dl class="sstats"><div><dt>Monitorando</dt><dd>${fmtT(s.monitoring_s)}</dd></div><div><dt>Gravado</dt><dd>${fmtT(s.recorded_s)}</dd></div>
+      <div><dt>Candidatos</dt><dd>${s.candidates}</dd></div><div><dt>Cortes</dt><dd>${s.clips}</dd></div></dl>` : `<p class="muted small">Ainda não monitorada.</p>`;
+  const why = s && !active && s.stop_reason ? `<p class="muted small">Última sessão: ${esc(STOPR[s.stop_reason] || s.stop_reason)}${s.error ? " · " + esc(s.error) : ""}</p>` : "";
+  return `<article class="scard st-${esc(x.state)}" aria-label="Transmissão ${esc(x.channel)}">
+    <div class="pv">${pv}<span class="chip ${k}">${esc(st)}</span></div>
+    <div class="scard-b"><div class="row"><h3 title="${esc(x.channel)}">${esc(x.channel)}</h3><span class="spacer"></span><span class="plat">${esc(plat)} · slot ${x.slot}</span></div>
+      ${stats}${why}
+      <div class="row sacts">${active ? `<button class="btn" data-sact="pause" data-id="${esc(x.id)}" ${x.state === "stopping" ? "disabled" : ""}>${icon("stop")}Pausar</button>`
+        : `<button class="btn primary" data-sact="start" data-id="${esc(x.id)}">${icon("play")}Iniciar</button>`}
+        ${s ? `<a class="btn" href="/live/${esc(s.id)}" data-link>${icon("radio")}Inspecionar</a>` : ""}
+        <button class="btn ghost icon-btn" data-sact="remove" data-id="${esc(x.id)}" aria-label="Remover ${esc(x.channel)}" title="Remover">${icon("trash")}</button></div></div></article>`;
+}
+
 async function liveHome() {
-  const [sessions, me] = await Promise.all([api("/api/live/sessions"), api("/api/me")]); S.me = me; const L = me.limits; const cs = me.live_claude || {};
-  const act = sessions.find((s) => s.status !== "stopped");
-  if (act) return go(`/live/${act.id}`);
-  const past = sessions.map((s) => `<a class="proj" href="/live/${esc(s.id)}" data-link><div class="cover live-cover">${icon("radio")}</div><div class="meta"><h3>twitch.tv/${esc(s.channel)}</h3>
+  const [mon, sessions, me] = await Promise.all([api("/api/live/monitor"), api("/api/live/sessions"), api("/api/me")]); S.me = me; const L = me.limits; const cs = mon.claude || {};
+  const cfg = LCFG(); const free = mon.slots - mon.streams.length;
+  const past = sessions.filter((s) => s.status === "stopped").slice(0, 12).map((s) => `<a class="proj" href="/live/${esc(s.id)}" data-link><div class="cover live-cover">${icon("radio")}</div><div class="meta"><h3>twitch.tv/${esc(s.channel)}</h3>
     <div class="sub"><span>${fmtT(s.recorded_s)} gravados</span><span>${s.calls} análises</span><span>${usd(s.spent_usd)}</span><span>${ago(s.created_at)}</span></div></div>
     <span class="chip">${esc(STOPR[s.stop_reason] || LSTATUS[s.status][0])}</span></a>`).join("");
-  render(shell("/live", `<div class="page-head"><div><h1>Claude Live Monitor</h1><p>Gravação contínua da live, detecção de momentos e análise do Claude com os frames realmente enviados.</p></div></div>
-    <div class="new-grid"><form class="panel stack" id="lf">
-      <div class="row">${cs.state === "ready" ? '<span class="chip ok">Claude API configurada</span>' : '<span class="chip bad">Claude desconectado</span>'}</div>
-      ${cs.state === "ready" ? "" : `<p class="muted">${esc(cs.detail)} Você ainda pode gravar e ver os momentos candidatos detectados por áudio, imagem e fala, e criar cortes manualmente.</p>`}
-      <div class="field"><label for="lch">Canal da Twitch</label><div class="row"><input class="input grow" id="lch" placeholder="twitch.tv/canal" autocomplete="off">
-        <button class="btn" type="button" id="lck">Verificar</button></div><span class="hint" id="lst" aria-live="polite"></span></div>
-      <div class="two"><div class="field"><label for="lbud">Orçamento de IA (US$)</label><input class="input" id="lbud" type="number" min="0" step="0.05" max="${L ? L.live_budget_usd_max : 0}" value="${L ? Math.min(0.5, L.live_budget_usd_max) : 0}">
-        <span class="hint">Máximo do plano: US$ ${L ? L.live_budget_usd_max.toFixed(2) : "0"}. A sessão para sozinha ao atingir.</span></div>
-      <div class="field"><label for="lmin">Duração máxima (min)</label><input class="input" id="lmin" type="number" min="1" max="${L ? L.live_max_minutes : 0}" value="${L ? Math.min(30, L.live_max_minutes) : 0}">
-        <span class="hint">Até ${L ? L.live_max_minutes : 0} min no seu plano.</span></div></div>
-      <div class="field"><label for="llang">Idioma da live</label><select class="input" id="llang">${Object.entries(LANG).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select></div>
-      <p class="error-text" id="lerr" role="alert"></p>
-      <button class="btn primary lg" id="lgo" type="submit" ${L ? "" : "disabled"}>${icon("play")}Iniciar monitoramento</button></form>
-    <aside class="panel stack"><h3>Como funciona</h3><ol class="steps compact"><li><b>1</b>O agente grava a live em blocos de 10 s no servidor.</li>
-      <li><b>2</b>Cada bloco é transcrito e medido (volume, mudança de imagem, palavras).</li>
-      <li><b>3</b>Nos picos, até 3 frames e a fala do trecho vão para o Claude, que responde com decisão, horários e justificativa.</li>
-      <li><b>4</b>Cortes aprovados são renderizados enquanto a gravação continua.</li></ol>
-      <p class="muted small">O Claude só vê os frames e trechos de fala enviados — cada um aparece no monitor com o horário exato.</p></aside></div>
-    ${sessions.length ? `<h2 class="section-title">Sessões anteriores</h2><div class="projects">${past}</div>` : ""}`));
+  const q = mon.quota;
+  render(shell("/live", `<div class="page-head"><div><h1>Live Monitor</h1><p>${mon.slots ? `Plano ${esc(mon.plan)}: até <strong>${mon.slots}</strong> transmissões ao mesmo tempo.` : "Sem plano ativo."}
+      O agente do servidor grava cada transmissão em blocos de 10 s; nada depende desta aba aberta.</p></div>
+      <div class="row">${cs.state === "ready" ? '<span class="chip ok">Claude API configurada</span>' : '<span class="chip bad">Claude desconectado</span>'}</div></div>
+    <div class="meters"><div class="meter"><span class="muted">Monitorando agora</span><div class="num">${mon.active} <span>de ${mon.slots}</span></div><progress max="${mon.slots || 1}" value="${mon.active}" aria-label="Transmissões ativas"></progress></div>
+      ${q ? `<div class="meter"><span class="muted">Horas de monitoramento no mês</span><div class="num">${mon.usage.live_hours.toFixed(1)} <span>de ${q.live_hours_per_month} h</span></div><progress max="${q.live_hours_per_month}" value="${mon.usage.live_hours}" aria-label="Horas usadas"></progress></div>
+      <div class="meter"><span class="muted">Cortes do Live no mês</span><div class="num">${mon.usage.live_clips} <span>de ${q.live_clips_per_month}</span></div><progress max="${q.live_clips_per_month}" value="${mon.usage.live_clips}" aria-label="Cortes usados"></progress></div>` : ""}</div>
+    ${cs.state === "ready" ? "" : `<p class="notice">${esc(cs.detail)} Gravação, detecção de candidatos e cortes manuais funcionam; nenhum frame é enviado à IA.</p>`}
+    ${mon.test_source ? `<p class="notice bad">Ambiente de teste: as transmissões abaixo são arquivos de vídeo locais tocados como se fossem lives (não são canais reais).</p>` : ""}
+    ${free > 0 && L ? `<form class="panel stack connect" id="lf" aria-labelledby="lfh"><h2 id="lfh">Conectar transmissão <span class="muted small">(${free} slot${free > 1 ? "s" : ""} livre${free > 1 ? "s" : ""})</span></h2>
+      <div class="field"><label for="lch">Canal da Twitch</label><div class="row"><input class="input grow" id="lch" placeholder="twitch.tv/canal" autocomplete="off" required>
+        <button class="btn" type="button" id="lck">Verificar se está ao vivo</button></div><span class="hint" id="lst" aria-live="polite"></span></div>
+      <fieldset class="scopes"><legend>Declaração obrigatória</legend>
+        <label class="check"><input type="radio" name="rb" value="owner" required> Sou o titular deste canal</label>
+        <label class="check"><input type="radio" name="rb" value="authorized"> Tenho autorização do titular para gerar cortes deste canal</label>
+        <span class="hint">Leia as <a href="/regras-live-ia" target="_blank" rel="noopener">Regras do Live Monitor</a>. Monitorar canais de terceiros sem autorização é proibido.</span></fieldset>
+      <p class="error-text" id="lerr" role="alert"></p><div class="row"><button class="btn primary" id="lgo" type="submit">${icon("plus")}Conectar</button></div></form>` : ""}
+    <details class="panel lcfg"><summary>Configuração das próximas sessões</summary><div class="two">
+      <div class="field"><label for="lbud">Orçamento de IA por sessão (US$)</label><input class="input" id="lbud" type="number" min="0" step="0.05" max="${L ? L.live_budget_usd_max : 0}" value="${cfg.budget ?? (L ? Math.min(0.5, L.live_budget_usd_max) : 0)}">
+        <span class="hint">Máximo do plano: US$ ${L ? L.live_budget_usd_max.toFixed(2) : "0"} por sessão.</span></div>
+      <div class="field"><label for="lmin">Duração máxima por sessão (min)</label><input class="input" id="lmin" type="number" min="1" max="${L ? L.live_max_minutes : 0}" value="${cfg.minutes ?? (L ? Math.min(60, L.live_max_minutes) : 0)}">
+        <span class="hint">Até ${L ? L.live_max_minutes : 0} min no seu plano.</span></div>
+      <div class="field"><label for="llang">Idioma das lives</label><select class="input" id="llang">${Object.entries(LANG).map(([k, v]) => `<option value="${k}" ${cfg.lang === k ? "selected" : ""}>${v}</option>`).join("")}</select></div></div></details>
+    <h2 class="section-title">Transmissões <span class="muted small">${mon.streams.length} de ${mon.slots} slots</span></h2>
+    <div class="sgrid" id="sgrid" data-slots="${mon.slots}"></div>
+    ${past ? `<h2 class="section-title">Histórico de sessões</h2><div class="projects">${past}</div>` : ""}`));
+  const paintGrid = (m) => {
+    const cards = m.streams.map((x) => streamCard(x, m.test_source)); for (let k = m.streams.length; k < m.slots; k++) cards.push(`<div class="scard empty-slot" aria-label="Slot livre"><span>Slot ${k + 1} livre</span></div>`);
+    $("#sgrid").innerHTML = cards.join("") || `<p class="muted">Sem plano ativo.</p>`;
+  };
+  paintGrid(mon);
+  const saveCfg = () => localStorage.setItem("lcfg", JSON.stringify({ budget: +$("#lbud").value, minutes: +$("#lmin").value, lang: $("#llang").value }));
+  ["#lbud", "#lmin", "#llang"].forEach((s) => $(s)?.addEventListener("change", saveCfg));
+  $("#sgrid").addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-sact]"); if (!b) return; const id = b.dataset.id, act = b.dataset.sact;
+    if (act === "remove" && !confirm("Remover esta transmissão? Se estiver gravando, o monitoramento para. Os cortes já gerados continuam na Biblioteca.")) return;
+    b.disabled = true;
+    try {
+      if (act === "start") await api(`/api/live/streams/${id}/start`, { method: "POST", json: { budget_usd: +$("#lbud").value, max_minutes: +$("#lmin").value, lang: $("#llang").value } });
+      else if (act === "pause") await api(`/api/live/streams/${id}/pause`, { method: "POST" });
+      else { await api(`/api/live/streams/${id}`, { method: "DELETE" }); return liveHome(); }
+      paintGrid(await api("/api/live/monitor"));
+    } catch (err) { toast(err.message, true); b.disabled = false; }
+  });
   const chk = async () => {
     $("#lst").textContent = "Consultando a Twitch…";
     try { const r = await api(`/api/live/channel?q=${encodeURIComponent($("#lch").value)}`); $("#lst").textContent = r.live ? `Ao vivo: ${r.title || ""} · ${r.category || ""}` : (r.error || "Este canal não está ao vivo agora."); return r; }
     catch (e) { $("#lst").textContent = e.message; return null; }
   };
-  $("#lck").onclick = chk;
-  $("#lf").onsubmit = async (e) => {
+  $("#lck")?.addEventListener("click", chk);
+  $("#lf")?.addEventListener("submit", async (e) => {
     e.preventDefault(); $("#lerr").textContent = ""; $("#lgo").disabled = true;
-    try {
-      const r = await chk(); if (!r || !r.live) throw new Error("O canal precisa estar ao vivo para iniciar.");
-      const s = await api("/api/live/sessions", { method: "POST", json: { channel: $("#lch").value, budget_usd: +$("#lbud").value, max_minutes: +$("#lmin").value, lang: $("#llang").value } });
-      go(`/live/${s.id}`);
-    } catch (err) { $("#lerr").textContent = err.message; $("#lgo").disabled = false; }
-  };
+    try { await api("/api/live/streams", { method: "POST", json: { channel: $("#lch").value, rights_basis: ($("input[name=rb]:checked") || {}).value } }); toast("Transmissão conectada."); liveHome(); }
+    catch (err) { $("#lerr").textContent = err.message; $("#lgo").disabled = false; }
+  });
+  const tick = async () => { if (location.pathname !== "/live") return; try { paintGrid(await api("/api/live/monitor")); } catch { /* rede */ } poll(tick, 4000); };
+  poll(tick, 4000);
 }
 
 const KIND = {

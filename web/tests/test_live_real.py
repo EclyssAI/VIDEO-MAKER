@@ -37,8 +37,8 @@ def test_real_twitch_gravacao_deteccao_corte_e_latencias():
                 if httpx.get(base + "/healthz").status_code == 200: break
             except httpx.HTTPError: time.sleep(0.5)
         c = httpx.Client(base_url=base, timeout=60)
-        assert c.post("/api/auth/signup", json={"email": "real@teste.com", "password": "senha-forte-123"}, headers=H).status_code == 200
-        r = c.post("/api/live/sessions", json={"channel": ch["channel"], "budget_usd": 0.5, "max_minutes": minutes + 3}, headers=H)
+        assert c.post("/api/auth/signup", json={"email": "real@teste.com", "password": "senha-forte-123", "accept_terms": True}, headers=H).status_code == 200
+        r = c.post("/api/live/sessions", json={"channel": ch["channel"], "budget_usd": 0.5, "max_minutes": minutes + 3, "rights_basis": "owner"}, headers=H)
         assert r.status_code == 200, r.text; sid = r.json()["id"]; t_start = time.time()
         assert r.json()["claude"]["configured"] is claude_real
         db = sqlite3.connect(data / "app.db"); db.row_factory = sqlite3.Row

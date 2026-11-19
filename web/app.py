@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 import contextlib
-from . import db, auth, plans, billing, copywriter, mcp_server
+from . import db, auth, plans, billing, copywriter, mcp_server, legal
 from .worker import enqueue
 from .live.api import router as live_router
 from .live import claude_live
@@ -67,7 +67,13 @@ def me_payload(c, u):
     return {"id": u["id"], "email": u["email"], "name": u["name"], "handle": u["handle"], "plan": plan,
             "plan_label": L["label"] if L else None, "plan_status": u["plan_status"], "plan_until": u["plan_until"],
             "limits": L, "usage": plans.usage(c, u["id"]), "claude_copy": copywriter.enabled(),
-            "live_claude": dict(zip(("state", "detail"), claude_live.status())), "public_url": mcp_server.PUBLIC_URL}
+            "live_claude": dict(zip(("state", "detail"), claude_live.status())), "public_url": mcp_server.PUBLIC_URL,
+            "terms": legal.status(c, u["id"])}
+
+
+def require_terms(c, u):
+    try: legal.require(c, u["id"])
+    except legal.TermsRequired: raise HTTPException(428, "Aceite a versão atual dos Termos de Uso e da Política de Privacidade para continuar.")
 
 
 async def body(request):
@@ -86,16 +92,19 @@ async def signup(request: Request):
     b = await body(request); email = str(b.get("email", "")).strip().lower(); pw = b.get("password")
     if not auth.valid_email(email): raise HTTPException(400, "Informe um e-mail válido.")
     if not auth.valid_password(pw): raise HTTPException(400, "A senha precisa ter pelo menos 8 caracteres.")
+    if b.get("accept_terms") is not True:
+        raise HTTPException(400, "Para criar a conta, leia e aceite os Termos de Uso e a Política de Privacidade.")
     invite = os.environ.get("SIGNUP_INVITE_CODE")
     if invite and b.get("invite") != invite: raise HTTPException(403, "Código de convite inválido.")
     key = f"signup:{request.client.host if request.client else ''}"
-    if auth.throttled(key, limit=10, window=3600): raise HTTPException(429, "Muitas tentativas. Tente mais tarde.")
+    if auth.throttled(key, limit=int(os.environ.get("SIGNUP_PER_IP_HOUR", "10")), window=3600): raise HTTPException(429, "Muitas tentativas. Tente mais tarde.")
     with db.conn() as c:
         if c.execute("SELECT 1 FROM users WHERE email=?", (email,)).fetchone():
             auth.record_fail(key); raise HTTPException(409, "Já existe uma conta com este e-mail. Entre com sua senha.")
         uid = db.new_id("usr")
         c.execute("INSERT INTO users(id,email,pw_hash,name,created_at) VALUES(?,?,?,?,?)",
                   (uid, email, await asyncio.to_thread(auth.hash_pw, pw), str(b.get("name", ""))[:80], db.now()))
+        legal.accept(c, uid, "signup"); db.log_access(c, uid, request.client.host if request.client else "", "signup")
         billing.apply_pending(c, email)
         token = auth.create_session(c, uid); u = c.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
         resp = JSONResponse(me_payload(c, u))
@@ -113,6 +122,7 @@ async def login(request: Request):
         ok = await asyncio.to_thread(auth.check_pw, str(b.get("password", "")), u["pw_hash"] if u else auth.DUMMY_HASH)
         if not u or not ok:
             auth.record_fail(key); auth.record_fail(ekey); raise HTTPException(401, "E-mail ou senha incorretos.")
+        db.log_access(c, u["id"], request.client.host if request.client else "", "login")
         token = auth.create_session(c, u["id"]); resp = JSONResponse(me_payload(c, u))
     set_cookie(resp, token); return resp
 
@@ -136,6 +146,71 @@ async def update_me(request: Request):
         handle = re.sub(r"[^A-Za-z0-9_.@]", "", str(b.get("handle", u["handle"])))[:30]
         c.execute("UPDATE users SET name=?, handle=? WHERE id=?", (str(b.get("name", u["name"]))[:80], handle, u["id"]))
         return me_payload(c, c.execute("SELECT * FROM users WHERE id=?", (u["id"],)).fetchone())
+
+
+# ---------- documentos jurídicos, aceite e direitos do titular (LGPD art. 18) ----------
+@app.get("/api/legal/status")
+def legal_status(request: Request):
+    with db.conn() as c:
+        u = current_user(c, request); return {**legal.status(c, u["id"]), "history": legal.history(c, u["id"])}
+
+
+@app.post("/api/legal/accept")
+async def legal_accept(request: Request):
+    b = await body(request)
+    if b.get("terms_version") != legal.TERMS_VERSION or b.get("privacy_version") != legal.PRIVACY_VERSION:
+        raise HTTPException(409, "As versões aceitas não são as vigentes. Recarregue a página.")
+    with db.conn() as c:
+        u = current_user(c, request); return legal.accept(c, u["id"], "reaccept")
+
+
+@app.get("/api/me/export")
+def export_me(request: Request):
+    """Portabilidade/acesso: dados da conta em JSON (sem hashes de senha/tokens). Vídeos ficam na Biblioteca para download."""
+    with db.conn() as c:
+        u = current_user(c, request); uid = u["id"]
+        rows = lambda q: [dict(r) for r in c.execute(q, (uid,))]
+        data = {"account": {k: u[k] for k in ("id", "email", "name", "handle", "plan", "plan_status", "plan_until", "email_verified", "created_at")},
+                "terms_acceptances": legal.history(c, uid),
+                "usage": rows("SELECT month, projects, minutes, live_s, live_clips FROM usage WHERE user_id=?"),
+                "projects": rows("SELECT id, name, source_name, duration, lang, status, created_at FROM projects WHERE user_id=?"),
+                "clips": rows("SELECT id, project_id, idx, start, \"end\", status, copy, created_at FROM clips WHERE user_id=?"),
+                "live_streams": rows("SELECT id, platform, channel, slot, rights_basis, rights_attested_at, created_at FROM live_streams WHERE user_id=?"),
+                "live_sessions": rows("SELECT id, channel, status, stop_reason, recorded_s, calls, spent_usd, started_at, stopped_at FROM live_sessions WHERE user_id=?"),
+                "live_moments": rows("SELECT id, session_id, peak, w_start, w_end, score, signals, status, decision, created_at FROM live_moments WHERE user_id=?"),
+                "live_frames_sent_to_ai": rows("SELECT id, session_id, moment_id, t_stream, sha256, sent_at FROM live_frames WHERE user_id=?"),
+                "access_logs": rows("SELECT ip, event, at FROM access_logs WHERE user_id=?"),
+                "api_tokens": rows("SELECT id, name, scopes, created_at, last_used_at, expires_at, revoked FROM api_tokens WHERE user_id=?"),
+                "exported_at": db.now()}
+    return JSONResponse(data, headers={"Content-Disposition": 'attachment; filename="clipeiaki-meus-dados.json"'})
+
+
+@app.delete("/api/me")
+async def delete_me(request: Request):
+    """Exclusão da conta: exige a senha. Para as lives ativas, remove banco (cascata) e arquivos do usuário.
+    Registros de pagamento ficam com a Cakto (obrigações fiscais); aqui só fica o e-mail em `entitlements`/`billing_events`
+    se houver assinatura — ver Política de Privacidade."""
+    b = await body(request)
+    with db.conn() as c:
+        u = current_user(c, request)
+        if not await asyncio.to_thread(auth.check_pw, str(b.get("password", "")), u["pw_hash"]):
+            raise HTTPException(403, "Senha incorreta.")
+        c.execute("UPDATE live_sessions SET status='stopping', stop_reason='user', updated_at=? WHERE user_id=? AND status IN ('starting','running','reconnecting')",
+                  (db.now(), u["id"]))
+        c.execute("UPDATE jobs SET status='canceled', updated_at=? WHERE user_id=? AND status='queued'", (db.now(), u["id"]))
+        c.execute("DELETE FROM users WHERE id=?", (u["id"],))
+    shutil.rmtree(db.user_dir(u["id"]), ignore_errors=True)
+    r = JSONResponse({"deleted": True}); r.delete_cookie(auth.COOKIE, path="/"); return r
+
+
+@app.get("/api/public/plans")
+def public_plans():
+    """Planos para a landing (mesma fonte que o backend usa para aplicar os limites)."""
+    keys = ("label", "price_brl", "projects_per_month", "minutes_per_month", "max_upload_mb", "max_video_minutes", "clips_per_project",
+            "premium_assets", "live_slots", "live_hours_per_month", "live_clips_per_month", "live_max_minutes", "live_budget_usd_max",
+            "live_ai_usd_per_month")
+    return {"plans": {k: {f: v[f] for f in keys} for k, v in plans.PLANS.items() if k in ("creator", "studio")},
+            "checkout_enabled": billing.enabled(), "checkout": billing.checkout_urls(), "terms_version": legal.TERMS_VERSION}
 
 
 # ---------- projetos ----------
@@ -188,7 +263,7 @@ async def create_project(request: Request):
     if ext not in ALLOWED_EXT: raise HTTPException(400, "Formato não suportado. Envie MP4, MOV, MKV, WEBM ou TS.")
     if lang not in LANGS: raise HTTPException(400, "Idioma inválido.")
     with db.conn() as c:
-        u = current_user(c, request)
+        u = current_user(c, request); require_terms(c, u)
         ok, msg = plans.check_new_project(c, u, size_bytes=int(b.get("size") or 0))
         if not ok: raise HTTPException(402, msg)
         active = c.execute("SELECT COUNT(*) FROM projects WHERE user_id=? AND status IN ('queued','processing','rendering')", (u["id"],)).fetchone()[0]
@@ -386,9 +461,18 @@ app.include_router(live_router)
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
+LEGAL_DIR = STATIC / "legal"
+
+
 @app.get("/{path:path}")
-def spa(path: str):
+def spa(path: str, request: Request):
     if path.startswith("api/"): raise HTTPException(404)
+    doc = path.strip("/")
+    if doc in legal.DOCS and (LEGAL_DIR / f"{doc}.html").exists():  # páginas jurídicas públicas (não exigem login)
+        return FileResponse(LEGAL_DIR / f"{doc}.html", headers={"Cache-Control": "no-cache"})
+    if doc == "":  # visitante sem sessão vê a landing; quem está logado vai direto para o painel
+        with db.conn() as c: logged = auth.user_from_token(c, request.cookies.get(auth.COOKIE))
+        if not logged: return FileResponse(STATIC / "site/index.html", headers={"Cache-Control": "no-cache"})
     return FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-cache"})
 
 

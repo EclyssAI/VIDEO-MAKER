@@ -37,3 +37,14 @@ VM_TEST_MEDIA=/pasta pytest -v web/tests/test_live.py             # [SIM] agente
 LIVE_REAL=1 pytest -v -s web/tests/test_live_real.py              # [REAL] live de verdade na Twitch
 ```
 MCP: `<PUBLIC_URL>/mcp` com token pessoal (Conta → ClipeiAki Live MCP) ou `CLIPEIAKI_TOKEN=... python -m web.mcp_server` (stdio).
+
+### Live Monitor multi-transmissão, landing e jurídico (v0.7.0)
+- Landing: `/` para visitantes; fonte em `web/site_src/index.html`; planos vêm de `config/plans.yaml`. Gerar: `python -m web.site_build`.
+- Documentos: `/termos`, `/privacidade`, `/cancelamento`, `/conteudo`, `/cookies`, `/regras-live-ia`, `/contato` (`web/legal_build.py`).
+- Relatório da entrega, PASS/BLOCKED e bloqueios de venda: **`docs/ENTREGA_LIVE_MONITOR.md`**. Capacidade e custos: `docs/CAPACIDADE_E_CUSTOS.md`.
+  Riscos jurídicos: `docs/RISCOS_JURIDICOS.md`.
+```bash
+pytest -v web/tests/test_monitor.py                                    # limites 3/10, isolamento, aceite, MCP (sem vídeo)
+python -m web.tests.load_live --mode real --streams 10 --minutes 8 --out carga.json   # carga com lives reais da Twitch
+BASE=http://127.0.0.1:8000 NODE_PATH=<axe-core> node web/tests/landing_check.js       # landing: responsivo + WCAG
+```

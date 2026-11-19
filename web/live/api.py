@@ -2,7 +2,7 @@
 import asyncio, hashlib, json, os
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
-from .. import db, auth, tokens
+from .. import db, auth, tokens, legal
 from . import service, store
 
 router = APIRouter()
@@ -20,6 +20,11 @@ def user_of(c, request):
 def call(fn, *a, **kw):
     try: return fn(*a, **kw)
     except service.LiveError as e: raise HTTPException(e.code, str(e))
+
+
+def terms_ok(c, u):
+    try: legal.require(c, u["id"])
+    except legal.TermsRequired: raise HTTPException(428, "Aceite a versão atual dos Termos de Uso e da Política de Privacidade para continuar.")
 
 
 async def body(request):
@@ -42,8 +47,53 @@ def sessions(request: Request):
 async def start(request: Request):
     b = await body(request)
     with db.conn() as c:
-        u = user_of(c, request)
-        return call(service.start, c, u, b.get("channel"), b.get("budget_usd"), b.get("max_minutes"), b.get("lang", "auto"))
+        u = user_of(c, request); terms_ok(c, u)
+        return call(service.start, c, u, b.get("channel"), b.get("budget_usd"), b.get("max_minutes"), b.get("lang", "auto"),
+                    rights_basis=b.get("rights_basis"))
+
+
+# ---------- Live Monitor: transmissões conectadas (slots do plano) ----------
+@router.get("/api/live/monitor")
+def monitor(request: Request):
+    with db.conn() as c: return service.monitor(c, user_of(c, request))
+
+
+@router.post("/api/live/streams")
+async def connect(request: Request):
+    b = await body(request)
+    with db.conn() as c:
+        u = user_of(c, request); terms_ok(c, u)
+        return call(service.connect_stream, c, u, b.get("channel"), b.get("rights_basis"), b.get("platform", "twitch"))
+
+
+@router.delete("/api/live/streams/{stream_id}")
+def remove(stream_id: str, request: Request):
+    with db.conn() as c: return call(service.remove_stream, c, user_of(c, request)["id"], stream_id)
+
+
+@router.post("/api/live/streams/{stream_id}/start")
+async def start_stream(stream_id: str, request: Request):
+    b = await body(request)
+    with db.conn() as c:
+        u = user_of(c, request); terms_ok(c, u)
+        return call(service.start_stream, c, u, stream_id, b.get("budget_usd"), b.get("max_minutes"), b.get("lang", "auto"))
+
+
+@router.post("/api/live/streams/{stream_id}/pause")
+def pause_stream(stream_id: str, request: Request):
+    with db.conn() as c: return call(service.pause_stream, c, user_of(c, request)["id"], stream_id)
+
+
+@router.get("/api/live/streams/{stream_id}/preview")
+def stream_preview(stream_id: str, request: Request):
+    with db.conn() as c: p, meta = call(service.preview, c, user_of(c, request)["id"], stream_id)
+    return FileResponse(p, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=5", "X-Preview-T-Stream": str(meta["t_stream"]),
+                                                             "X-Preview-Wall": str(meta["wall_at"])})
+
+
+@router.get("/api/live/moments/{moment_id}")
+def moment(moment_id: str, request: Request):
+    with db.conn() as c: return call(service.highlight, c, user_of(c, request)["id"], moment_id)
 
 
 @router.get("/api/live/sessions/{sid}")
@@ -128,7 +178,8 @@ def list_tokens(request: Request):
 async def create_token(request: Request):
     b = await body(request)
     with db.conn() as c:
-        try: tid, tok, scopes = tokens.create(c, user_of(c, request)["id"], str(b.get("name", "")), b.get("scopes") or [])
+        u = user_of(c, request); terms_ok(c, u)
+        try: tid, tok, scopes = tokens.create(c, u["id"], str(b.get("name", "")), b.get("scopes") or [], b.get("days"))
         except ValueError as e: raise HTTPException(400, str(e))
     return {"id": tid, "token": tok, "scopes": scopes}
 

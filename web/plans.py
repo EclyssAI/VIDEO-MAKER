@@ -19,8 +19,40 @@ def limits(plan): return PLANS.get(plan) if plan else None
 
 
 def usage(c, uid):
-    r = c.execute("SELECT projects, minutes FROM usage WHERE user_id=? AND month=?", (uid, db.month())).fetchone()
-    return {"projects": r["projects"] if r else 0, "minutes": round(r["minutes"], 1) if r else 0.0}
+    r = c.execute("SELECT projects, minutes, live_s, live_clips, ai_usd FROM usage WHERE user_id=? AND month=?", (uid, db.month())).fetchone()
+    return {"projects": r["projects"] if r else 0, "minutes": round(r["minutes"], 1) if r else 0.0,
+            "live_hours": round(r["live_s"] / 3600, 2) if r else 0.0, "live_clips": r["live_clips"] if r else 0,
+            "ai_usd": round(r["ai_usd"], 4) if r else 0.0}
+
+
+def charge_ai(c, uid, usd):
+    """Gasto real com a API do Claude no mês (somado quando a API responde)."""
+    c.execute("INSERT INTO usage(user_id, month, ai_usd) VALUES(?,?,?) ON CONFLICT(user_id, month) DO UPDATE SET ai_usd=ai_usd+excluded.ai_usd",
+              (uid, db.month(), usd))
+
+
+def ai_left(c, user):
+    L = limits(effective_plan(user))
+    return max(0.0, L.get("live_ai_usd_per_month", 0) - usage(c, user["id"])["ai_usd"]) if L else 0.0
+
+
+def charge_live(c, uid, seconds):
+    """Franquia do Live Monitor: soma o tempo gravado à medida que cada bloco é processado (não só ao encerrar)."""
+    c.execute("INSERT INTO usage(user_id, month, live_s) VALUES(?,?,?) ON CONFLICT(user_id, month) DO UPDATE SET live_s=live_s+excluded.live_s",
+              (uid, db.month(), seconds))
+
+
+def count_live_clip(c, uid):
+    c.execute("INSERT INTO usage(user_id, month, live_clips) VALUES(?,?,1) ON CONFLICT(user_id, month) DO UPDATE SET live_clips=live_clips+1",
+              (uid, db.month()))
+
+
+def live_quota_left(c, user):
+    """(horas, cortes) restantes no mês para o Live Monitor, ou None sem plano."""
+    L = limits(effective_plan(user))
+    if not L: return None
+    u = usage(c, user["id"])
+    return max(0.0, L["live_hours_per_month"] - u["live_hours"]), max(0, L["live_clips_per_month"] - u["live_clips"])
 
 
 def check_new_project(c, user, size_bytes=None, duration_s=None):

@@ -1,0 +1,35 @@
+/* Páginas jurídicas do ClipeiAki — mesmos tokens do app (web/static/styles.css). Texto ≥ 16 px (CDC art. 54, §3º pede corpo 12 no mínimo). */
+:root { --bg: #0b0b14; --bg-2: #10101f; --surface: #15152b; --line: rgba(255,255,255,.1); --text: #f4f4fb; --muted: #b8b8d2; --faint: #9a9ab8;
+  --primary: #7c6cff; --ring: #a99dff; --accent: #ffd400; --r: 18px; --pill: 999px; --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+* { box-sizing: border-box; }
+html { font-size: 106.25%; -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 400 1rem/1.65 var(--font); -webkit-font-smoothing: antialiased; }
+a { color: var(--ring); text-underline-offset: 3px; }
+:focus-visible { outline: 3px solid var(--ring); outline-offset: 3px; border-radius: 8px; }
+.skip { position: absolute; left: -9999px; } .skip:focus { left: 16px; top: 12px; z-index: 10; background: var(--surface); padding: 10px 16px; border-radius: var(--pill); }
+.lhead { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px clamp(16px, 4vw, 40px);
+  background: rgba(11,11,20,.85); backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
+.brand { display: inline-flex; align-items: center; gap: .6rem; color: var(--text); text-decoration: none; font-weight: 800; font-size: 1.1rem; }
+.btn { display: inline-flex; align-items: center; min-height: 44px; padding: 0 1.1rem; border-radius: var(--pill); border: 1px solid var(--line); color: var(--text);
+  text-decoration: none; font-weight: 600; background: var(--surface); }
+.lwrap { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: clamp(20px, 4vw, 56px); max-width: 1180px; margin: 0 auto; padding: 32px clamp(16px, 4vw, 40px) 64px; }
+.lnav ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; position: sticky; top: 84px; }
+.lnav a { display: block; padding: 10px 14px; border-radius: 12px; color: var(--muted); text-decoration: none; font-weight: 600; line-height: 1.35; }
+.lnav a:hover { background: var(--surface); color: var(--text); } .lnav a[aria-current="page"] { background: var(--surface); color: var(--text); }
+.ldoc { max-width: 76ch; min-width: 0; }
+.ldoc h1 { font-size: clamp(1.8rem, 2.5vw + 1rem, 2.5rem); line-height: 1.15; letter-spacing: -.02em; margin: 8px 0 4px; }
+.ldoc h2 { font-size: 1.3rem; margin: 2.2em 0 .6em; scroll-margin-top: 90px; }
+.ldoc p, .ldoc li { color: #e6e6f3; } .ldoc li { margin: .35em 0; }
+.ver { color: var(--faint); margin: 0 0 1.5em; } .lead { font-size: 1.12rem; color: var(--muted); }
+.destaque { padding: 14px 18px; border-left: 4px solid var(--accent); background: rgba(255,212,0,.06); border-radius: 0 12px 12px 0; }
+.notice-draft { font-size: .95rem; padding: 10px 14px; border-radius: 12px; background: rgba(124,108,255,.12); border: 1px solid rgba(124,108,255,.35); color: #ddd8ff; }
+mark.pend { background: rgba(255,212,0,.16); color: #ffe680; padding: 1px 6px; border-radius: 6px; font-family: ui-monospace, Menlo, monospace; font-size: .88em; }
+.ident { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; padding: 16px 18px; background: var(--surface); border-radius: var(--r); border: 1px solid var(--line); }
+.ident dt { color: var(--faint); } .ident dd { margin: 0; }
+.tbl { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: .97rem; display: block; overflow-x: auto; }
+.tbl th, .tbl td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.tbl th { color: var(--muted); font-weight: 600; } code { font-family: ui-monospace, Menlo, monospace; font-size: .92em; background: var(--bg-2); padding: 1px 6px; border-radius: 6px; }
+.lfoot { border-top: 1px solid var(--line); padding: 24px clamp(16px, 4vw, 40px) 40px; color: var(--faint); font-size: .95rem; text-align: center; }
+@media (max-width: 860px) { .lwrap { grid-template-columns: 1fr; } .lnav ul { position: static; display: flex; flex-wrap: wrap; gap: 6px; } .lnav a { padding: 8px 12px; background: var(--surface); }
+  .ident { grid-template-columns: 1fr; } .ident dd { margin-bottom: 8px; } }
+@media (prefers-reduced-transparency: reduce) { .lhead { backdrop-filter: none; background: var(--bg-2); } }

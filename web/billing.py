@@ -51,6 +51,16 @@ def _set(c, email, plan, status, until):
     c.execute("UPDATE users SET plan=?, plan_status=?, plan_until=? WHERE email=? AND email_verified=1", (plan, status, until, email))
 
 
+def minimal(body: dict):
+    """Minimização (LGPD art. 6º, III): do payload da Cakto guardamos só o necessário para auditar a liberação de acesso.
+    CPF, telefone, endereço, nome e dados de cartão NÃO são armazenados aqui (ficam com a Cakto)."""
+    d = body.get("data") or {}
+    keep = {k: d.get(k) for k in ("id", "refId", "status", "amount", "baseAmount", "paymentMethod", "createdAt", "paidAt", "canceledAt",
+                                  "refundedAt", "chargedbackAt", "installments") if k in d}
+    return {"event": body.get("event"), "data": {**keep, "offer": {"id": (d.get("offer") or {}).get("id")},
+                                                  "product": {"id": (d.get("product") or {}).get("id")}}}
+
+
 def handle(c, body: dict):
     """Aplica o evento. Retorna dict com o resultado (para log/teste)."""
     ev, data = body.get("event"), body.get("data") or {}
@@ -74,7 +84,7 @@ def handle(c, body: dict):
     elif email and ev in REVOKE and cur and (not plan or cur["plan"] == plan):
         _set(c, email, cur["plan"], "revoked", t); applied = 1
     c.execute("INSERT INTO billing_events(id,event,email,offer_id,plan,applied,raw,received_at) VALUES(?,?,?,?,?,?,?,?)",
-              (eid, ev or "", email, offer, plan, applied, json.dumps({k: v for k, v in body.items() if k != "secret"})[:20000], t))
+              (eid, ev or "", email, offer, plan, applied, json.dumps(minimal(body)), t))
     return {"applied": bool(applied), "plan": plan, "event": ev}
 
 

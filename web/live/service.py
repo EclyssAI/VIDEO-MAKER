@@ -68,27 +68,162 @@ def limits_for(user):
     return L
 
 
-def start(c, user, channel, budget_usd=None, max_minutes=None, lang="auto", min_confidence=0.6):
+RIGHTS = {"owner": "Sou o titular do canal", "authorized": "Tenho autorização do titular do canal para gerar cortes"}
+CAPACITY_TOTAL = int(os.environ.get("LIVE_CAPACITY_TOTAL", "10"))  # sessões ativas no servidor inteiro (medido em docs/CAPACIDADE_E_CUSTOS.md)
+
+
+def _tx(c):
+    """Transação de escrita exclusiva (SQLite): contagem + inserção sem corrida entre requisições simultâneas."""
+    c.execute("BEGIN IMMEDIATE")
+
+
+def _active_count(c, uid=None):
+    q = f"SELECT COUNT(*) FROM live_sessions WHERE status IN {store.ACTIVE}" + (" AND user_id=?" if uid else "")
+    return c.execute(q, (uid,) if uid else ()).fetchone()[0]
+
+
+def connect_stream(c, user, channel, rights_basis=None, platform="twitch"):
+    """Conecta uma transmissão a um slot do plano. Exige declaração de direitos (titular ou autorizado)."""
     L = limits_for(user); ch = parse_channel(channel)
+    if platform != "twitch": raise LiveError("Plataforma ainda não suportada. Hoje: Twitch.")
+    if rights_basis not in RIGHTS:
+        raise LiveError("Confirme que você é o titular do canal ou tem autorização do titular (rights_basis: owner ou authorized).", 400)
+    _tx(c)
+    try:
+        hit = c.execute("SELECT * FROM live_streams WHERE user_id=? AND platform=? AND channel=?", (user["id"], platform, ch)).fetchone()
+        if hit:
+            c.execute("COMMIT"); return stream_out(c, hit)
+        used = [r[0] for r in c.execute("SELECT slot FROM live_streams WHERE user_id=? ORDER BY slot", (user["id"],))]
+        if len(used) >= L["live_slots"]:
+            raise LiveError(f"Seu plano {L['label']} permite até {L['live_slots']} transmissão(ões) conectada(s). Remova uma para conectar outra.", 403)
+        slot = next(k for k in range(1, L["live_slots"] + 1) if k not in used)
+        t = db.now(); sid = db.new_id("str")
+        c.execute("INSERT INTO live_streams(id,user_id,platform,channel,slot,rights_basis,rights_attested_at,created_at,updated_at) "
+                  "VALUES(?,?,?,?,?,?,?,?,?)", (sid, user["id"], platform, ch, slot, rights_basis, t, t, t))
+        c.execute("COMMIT")
+    except Exception:
+        c.execute("ROLLBACK"); raise
+    return stream_out(c, c.execute("SELECT * FROM live_streams WHERE id=?", (sid,)).fetchone())
+
+
+def own_stream(c, uid, stream_id):
+    st = c.execute("SELECT * FROM live_streams WHERE id=? AND user_id=?", (stream_id, uid)).fetchone()
+    if not st: raise LiveError("Transmissão não encontrada.", 404)
+    return st
+
+
+def remove_stream(c, uid, stream_id):
+    st = own_stream(c, uid, stream_id)
+    if st["current_session_id"]:
+        try: stop(c, uid, st["current_session_id"])
+        except LiveError: pass
+    c.execute("DELETE FROM live_streams WHERE id=? AND user_id=?", (stream_id, uid))
+    return {"removed": stream_id, "channel": st["channel"]}
+
+
+def start_stream(c, user, stream_id, budget_usd=None, max_minutes=None, lang="auto", min_confidence=0.6):
+    """Inicia o monitoramento de uma transmissão conectada. Limites checados no backend, dentro de uma transação:
+    sessões simultâneas do plano (live_slots), franquia mensal, capacidade total do servidor."""
+    L = limits_for(user); st = own_stream(c, user["id"], stream_id)
     if lang not in ("auto", "pt", "en", "es"): raise LiveError("Idioma inválido.")
-    if c.execute(f"SELECT 1 FROM live_sessions WHERE user_id=? AND status IN {store.ACTIVE}", (user["id"],)).fetchone():
-        raise LiveError("Você já tem uma sessão ao vivo ativa. Pare a atual antes de iniciar outra.", 409)
-    u = plans.usage(c, user["id"])
-    if u["minutes"] >= L["minutes_per_month"]: raise LiveError("Seus minutos do mês acabaram.", 402)
+    hours_left, _ = plans.live_quota_left(c, user)
+    if hours_left <= 0: raise LiveError(f"Sua franquia de {L['live_hours_per_month']} h de monitoramento deste mês acabou.", 402)
     budget = min(num(budget_usd if budget_usd is not None else L["live_budget_usd_max"], "Orçamento"), L["live_budget_usd_max"])
-    minutes = min(num(max_minutes if max_minutes is not None else L["live_max_minutes"], "Duração"), L["live_max_minutes"],
-                  L["minutes_per_month"] - u["minutes"])
+    minutes = min(num(max_minutes if max_minutes is not None else L["live_max_minutes"], "Duração"), L["live_max_minutes"], hours_left * 60)
     if budget < 0 or minutes < 1: raise LiveError("Orçamento ou duração inválidos.")
-    t = db.now(); sid = db.new_id("live"); pid = db.new_id("prj")
-    c.execute("INSERT INTO projects(id,user_id,name,source_name,lang,status,created_at,updated_at) VALUES(?,?,?,?,?,'live',?,?)",
-              (pid, user["id"], f"Live · {ch} · {time.strftime('%d/%m %H:%M', time.gmtime(t - 3 * 3600))}", f"twitch.tv/{ch}", lang, t, t))
-    c.execute("INSERT INTO live_sessions(id,user_id,channel,project_id,status,lang,max_minutes,budget_usd,max_calls,min_confidence,"
-              "created_at,updated_at) VALUES(?,?,?,?,'starting',?,?,?,?,?,?,?)",
-              (sid, user["id"], ch, pid, lang, minutes, budget, int(L["live_max_calls"]), min(max(num(min_confidence, "Confiança"), 0), 1), t, t))
+    conf = min(max(num(min_confidence, "Confiança"), 0), 1)
+    _tx(c)
+    try:
+        if st["slot"] > L["live_slots"]:
+            raise LiveError(f"Esta transmissão ocupa o slot {st['slot']}, acima dos {L['live_slots']} do plano {L['label']}.", 403)
+        if c.execute(f"SELECT 1 FROM live_sessions WHERE stream_id=? AND status IN {store.ACTIVE}", (stream_id,)).fetchone():
+            raise LiveError("Esta transmissão já está sendo monitorada.", 409)
+        if _active_count(c, user["id"]) >= L["live_slots"]:
+            raise LiveError(f"Limite do plano {L['label']}: {L['live_slots']} transmissão(ões) monitorada(s) ao mesmo tempo.", 403)
+        if _active_count(c) >= CAPACITY_TOTAL:
+            raise LiveError("Capacidade de monitoramento do servidor esgotada no momento. Tente novamente em alguns minutos.", 503)
+        t = db.now(); sid = db.new_id("live"); pid = db.new_id("prj"); ch = st["channel"]
+        c.execute("INSERT INTO projects(id,user_id,name,source_name,lang,status,created_at,updated_at) VALUES(?,?,?,?,?,'live',?,?)",
+                  (pid, user["id"], f"Live · {ch} · {time.strftime('%d/%m %H:%M', time.gmtime(t - 3 * 3600))}", f"twitch.tv/{ch}", lang, t, t))
+        c.execute("INSERT INTO live_sessions(id,user_id,channel,project_id,status,lang,max_minutes,budget_usd,max_calls,min_confidence,"
+                  "stream_id,transcribe_mode,created_at,updated_at) VALUES(?,?,?,?,'starting',?,?,?,?,?,?,?,?,?)",
+                  (sid, user["id"], ch, pid, lang, minutes, budget, int(L["live_max_calls"]), conf, stream_id,
+                   os.environ.get("LIVE_TRANSCRIBE", "events"), t, t))
+        c.execute("UPDATE live_streams SET current_session_id=?, updated_at=? WHERE id=?", (sid, t, stream_id))
+        c.execute("COMMIT")
+    except Exception:
+        c.execute("ROLLBACK"); raise
     s = store.get_session(c, user["id"], sid)
-    store.event(c, s, "created", {"channel": ch, "budget_usd": budget, "max_minutes": minutes, "max_calls": int(L["live_max_calls"]),
-                                  "claude": claude_live.status()[0]}, 0)
+    store.event(c, s, "created", {"channel": st["channel"], "stream_id": stream_id, "slot": st["slot"], "budget_usd": budget,
+                                  "max_minutes": minutes, "max_calls": int(L["live_max_calls"]), "claude": claude_live.status()[0]}, 0)
     return session_out(c, s)
+
+
+def pause_stream(c, uid, stream_id):
+    st = own_stream(c, uid, stream_id)
+    if not st["current_session_id"]: raise LiveError("Esta transmissão não está sendo monitorada.", 409)
+    return stop(c, uid, st["current_session_id"])
+
+
+def start(c, user, channel, budget_usd=None, max_minutes=None, lang="auto", min_confidence=0.6, rights_basis=None):
+    """Compatível com a API anterior (um canal por chamada): conecta (se preciso) e inicia."""
+    st = connect_stream(c, user, channel, rights_basis)
+    return start_stream(c, user, st["id"], budget_usd, max_minutes, lang, min_confidence)
+
+
+STREAM_STATE = {"starting": "starting", "running": "live", "reconnecting": "reconnecting", "stopping": "stopping"}
+STOP_STATE = {"user": "paused", "offline": "offline", "error": "error", "duration": "limit", "budget": "limit", "calls": "limit",
+              "quota": "limit", "plan": "limit"}
+
+
+def stream_out(c, st):
+    s = c.execute("SELECT * FROM live_sessions WHERE id=? AND user_id=?", (st["current_session_id"], st["user_id"])).fetchone() \
+        if st["current_session_id"] else None
+    state = "idle"
+    if s: state = STREAM_STATE.get(s["status"]) or STOP_STATE.get(s["stop_reason"], "paused")
+    out = {"id": st["id"], "platform": st["platform"], "channel": st["channel"], "slot": st["slot"], "url": f"https://www.twitch.tv/{st['channel']}",
+           "rights_basis": st["rights_basis"], "rights_attested_at": st["rights_attested_at"], "state": state, "session": None}
+    if s:
+        n = c.execute("SELECT COUNT(*) AS n, SUM(clip_id!='') AS k FROM live_moments WHERE session_id=?", (s["id"],)).fetchone()
+        last = c.execute("SELECT kind, t_stream, wall_at, data FROM live_events WHERE session_id=? AND kind!='segment' ORDER BY id DESC LIMIT 1",
+                         (s["id"],)).fetchone()
+        now = db.now()
+        out["session"] = {"id": s["id"], "status": s["status"], "stop_reason": s["stop_reason"] or None, "error": s["error"] or None,
+                          "recorded_s": round(s["recorded_s"], 1), "started_at": s["started_at"] or None, "stopped_at": s["stopped_at"] or None,
+                          "monitoring_s": round(((s["stopped_at"] or now) - s["started_at"]) if s["started_at"] else 0, 1),
+                          "candidates": n["n"] or 0, "clips": int(n["k"] or 0), "calls": s["calls"], "spent_usd": s["spent_usd"],
+                          "agent_alive": s["locked_until"] > now,
+                          "preview": {"url": f"/api/live/streams/{st['id']}/preview?v={int(s['preview_wall'])}", "t_stream": s["preview_t"],
+                                      "wall_at": s["preview_wall"]} if s["preview_wall"] else None,
+                          "last_event": {"kind": last["kind"], "t_stream": last["t_stream"], "wall_at": last["wall_at"]} if last else None}
+    return out
+
+
+def list_streams(c, uid):
+    return [stream_out(c, st) for st in c.execute("SELECT * FROM live_streams WHERE user_id=? ORDER BY slot", (uid,))]
+
+
+def monitor(c, user):
+    """Painel do Live Monitor: slots do plano, uso do mês e estado real de cada transmissão."""
+    L = plans.limits(plans.effective_plan(user)); u = plans.usage(c, user["id"])
+    return {"plan": L["label"] if L else None, "slots": L["live_slots"] if L else 0, "active": _active_count(c, user["id"]),
+            "usage": {"live_hours": u["live_hours"], "live_clips": u["live_clips"], "ai_usd": u["ai_usd"]},
+            "quota": {"live_hours_per_month": L["live_hours_per_month"], "live_clips_per_month": L["live_clips_per_month"],
+                      "live_ai_usd_per_month": L.get("live_ai_usd_per_month", 0)} if L else None,
+            "claude": dict(zip(("state", "detail"), claude_live.status())), "streams": list_streams(c, user["id"]),
+            # servidor de TESTE tocando arquivos locais como se fossem lives: a interface mostra isso explicitamente
+            "test_source": bool(os.environ.get("LIVE_SOURCE_OVERRIDE"))}
+
+
+def preview(c, uid, stream_id):
+    """Último frame REAL gravado da transmissão (extraído do bloco mais recente pelo agente)."""
+    st = own_stream(c, uid, stream_id)
+    s = c.execute("SELECT * FROM live_sessions WHERE id=? AND user_id=?", (st["current_session_id"], uid)).fetchone() if st["current_session_id"] else None
+    if not s or not s["preview_wall"]: raise LiveError("Ainda não há frame gravado desta transmissão.", 404)
+    p = store.preview_path(uid, s["id"])
+    if not p.exists(): raise LiveError("Preview indisponível (sessão encerrada e buffer apagado).", 404)
+    return p, {"stream_id": stream_id, "session_id": s["id"], "channel": st["channel"], "t_stream": s["preview_t"], "wall_at": s["preview_wall"],
+               "age_s": round(db.now() - s["preview_wall"], 1), "session_status": s["status"]}
 
 
 def stop(c, uid, sid):
@@ -111,7 +246,7 @@ def session_out(c, s, full=False):
             d = json.loads(ev["data"])
             last = {"event_id": ev["id"], "at": ev["wall_at"], "t_stream": ev["t_stream"], "decision": d["decision"], "confidence": d["confidence"],
                     "summary": d["summary"], "reason": d["reason"], "frames": d["frames"], "latency_s": d.get("latency_s"), "cost_usd": d.get("cost_usd")}
-    out = {k: s[k] for k in ("id", "channel", "project_id", "status", "stop_reason", "error", "lang", "max_minutes", "budget_usd",
+    out = {k: s[k] for k in ("id", "stream_id", "channel", "project_id", "status", "stop_reason", "error", "lang", "max_minutes", "budget_usd",
                              "max_calls", "min_confidence", "spent_usd", "calls", "recorded_s", "started_at", "stopped_at", "created_at", "updated_at")}
     seg = c.execute("SELECT seq, t_start, duration, wall_start FROM live_segments WHERE session_id=? AND duration>0 ORDER BY seq DESC LIMIT 1",
                     (s["id"],)).fetchone()
@@ -156,6 +291,9 @@ def request_clip(c, uid, sid, moment_id=None, start_t=None, end_t=None):
     s = store.get_session(c, uid, sid)
     if not s: raise LiveError("Sessão não encontrada.", 404)
     if s["status"] not in ("running", "reconnecting"): raise LiveError("A sessão precisa estar gravando (o trecho fica no buffer do agente).", 409)
+    u = c.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone(); q = plans.live_quota_left(c, u) if u else None
+    if not q: raise LiveError("Sua conta não tem um plano ativo.", 402)
+    if q[1] <= 0: raise LiveError("Sua franquia de cortes do Live Monitor deste mês acabou.", 402)
     busy = c.execute("SELECT COUNT(*) FROM jobs WHERE user_id=? AND type='render' AND status IN ('queued','running')", (uid,)).fetchone()[0]
     pend = c.execute("SELECT COUNT(*) FROM live_moments WHERE session_id=? AND status='clip_requested'", (sid,)).fetchone()[0]
     if busy + pend >= int(os.environ.get("MAX_USER_RENDERS", "8")): raise LiveError("Muitos cortes na fila. Aguarde os atuais terminarem.", 429)
@@ -200,3 +338,51 @@ def frame_path(c, uid, fid):
     p = (db.DATA / f["path"]).resolve()
     if db.user_dir(uid).resolve() not in p.parents or not p.exists(): raise LiveError("Frame não encontrado.", 404)
     return p, f
+
+
+def resolve_session(c, uid, session_id=None, stream_id=None):
+    """Aceita session_id ou stream_id (usa a sessão atual/última da transmissão)."""
+    if session_id:
+        if not store.get_session(c, uid, session_id): raise LiveError("Sessão não encontrada.", 404)
+        return session_id
+    if stream_id:
+        st = own_stream(c, uid, stream_id)
+        if not st["current_session_id"]: raise LiveError("Esta transmissão ainda não foi monitorada.", 404)
+        return st["current_session_id"]
+    raise LiveError("Informe session_id ou stream_id.")
+
+
+def highlight(c, uid, moment_id):
+    """Evidências REAIS de um momento: sinais medidos, transcrição da janela, frames enviados ao Claude (com SHA-256),
+    decisão validada e o corte gerado. Nada é inferido aqui."""
+    m = c.execute("SELECT m.*, s.channel, s.stream_id FROM live_moments m JOIN live_sessions s ON s.id=m.session_id "
+                  "WHERE m.id=? AND m.user_id=?", (moment_id, uid)).fetchone()
+    if not m: raise LiveError("Momento não encontrado.", 404)
+    segs = c.execute("SELECT words, deleted FROM live_segments WHERE session_id=? AND t_start<? AND t_start+duration>? ORDER BY seq",
+                     (m["session_id"], m["w_end"], m["w_start"])).fetchall()
+    words = [w for x in segs for w in json.loads(x["words"]) if m["w_start"] <= w["s"] <= m["w_end"]]
+    frames = [{"id": f["id"], "t_stream": f["t_stream"], "sha256": f["sha256"], "sent_at": f["sent_at"], "url": f"/api/live/frames/{f['id']}"}
+              for f in c.execute("SELECT * FROM live_frames WHERE moment_id=? AND user_id=? ORDER BY t_stream", (moment_id, uid))]
+    clip = render_status(c, uid, m["clip_id"]) if m["clip_id"] else None
+    return {"id": m["id"], "session_id": m["session_id"], "stream_id": m["stream_id"] or None, "channel": m["channel"], "peak": m["peak"],
+            "window": [m["w_start"], m["w_end"]], "score": m["score"], "signals": json.loads(m["signals"]), "status": m["status"],
+            "source": m["source"], "decision": json.loads(m["decision"]) if m["decision"] else None, "error": m["error"] or None,
+            "transcript": " ".join(w["w"] for w in words), "words": len(words),
+            "transcript_available": bool(segs) and not any(x["deleted"] for x in segs) or bool(words),
+            "frames_sent_to_claude": frames, "clip": clip, "created_at": m["created_at"]}
+
+
+def approve_clip(c, uid, clip_id):
+    x = c.execute("SELECT * FROM clips WHERE id=? AND user_id=?", (clip_id, uid)).fetchone()
+    if not x: raise LiveError("Corte não encontrado.", 404)
+    if x["status"] == "approved": return render_status(c, uid, clip_id)
+    if x["status"] != "ready": raise LiveError("O corte precisa estar pronto (renderizado) para ser aprovado.", 409)
+    c.execute("UPDATE clips SET status='approved', updated_at=? WHERE id=? AND user_id=? AND status='ready'", (db.now(), clip_id, uid))
+    return render_status(c, uid, clip_id)
+
+
+def render_jobs(c, uid, status=None, limit=50):
+    q = ("SELECT j.id, j.status, j.progress, j.stage, j.attempts, j.error, j.created_at, j.updated_at, j.clip_id, j.project_id, "
+         "cl.status AS clip_status, p.name AS project FROM jobs j LEFT JOIN clips cl ON cl.id=j.clip_id LEFT JOIN projects p ON p.id=j.project_id "
+         "WHERE j.user_id=? AND j.type='render'" + (" AND j.status=?" if status else "") + " ORDER BY j.created_at DESC LIMIT ?")
+    return [dict(r) for r in c.execute(q, (uid, *([status] if status else []), max(1, min(int(limit), 200))))]

@@ -1,6 +1,20 @@
 # Changelog — ClipeiAki
 Versionamento semântico (MAJOR.MINOR.PATCH). Versão atual em `VERSION`.
 
+## [0.7.0] — 2026-11-19 — Live Monitor multi-transmissão, MCP completo, landing e documentos jurídicos
+- Live Monitor: transmissões conectadas em slots do plano (Creator 3, Creator Studio 10, Beta 1), limite aplicado no backend em
+  transação (sem corrida), bloqueio da 4ª/11ª, rebaixamento de plano respeitado, capacidade total do servidor (`LIVE_CAPACITY_TOTAL`).
+- Grade de 3/10 telas com preview real (último frame gravado, extraído na mesma decodificação da detecção), status, duração,
+  candidatos, cortes e ações iniciar/pausar/remover/inspecionar; franquia mensal de horas e cortes contada bloco a bloco.
+- Live Agent: Whisper ~6x mais leve (beam 1, sem condicionamento, bloqueio de n-gramas), transcrição por evento, imagem por
+  quadros-chave acima de 3 sessões, banda medida por bloco; correção: orçamento de IA US$ 0 não encerra mais a sessão.
+- MCP: 15 ferramentas (list_connected_streamers, connect_stream, start/stop_monitoring, get_live_status, get_live_preview com
+  imagem, list_detected_moments, get_highlight com evidências, create_clip, approve_clip, list_render_jobs…), limite de
+  requisições por token, tokens com validade.
+- Jurídico: 7 páginas públicas, aceite versionado (cadastro e reaceite com HTTP 428), exportação e exclusão de dados,
+  registros de acesso por 6 meses, payload da Cakto minimizado. Revisão de riscos em `docs/RISCOS_JURIDICOS.md`.
+- Landing comercial servida em `/` para visitantes (gerada de `web/site_src` + `config/plans.yaml` por `python -m web.site_build`).
+
 ## [0.6.0] — 2026-11-18 — Produção em lote (stack)
 - `capture/harvest.py`, `capture/stack.py` (plan/prepare/apply), `capture/deliver.py`.
 - Detecção automática de webcam/rosto com YuNet (OpenCV), modelo em template/models/.

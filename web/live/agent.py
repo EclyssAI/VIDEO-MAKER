@@ -31,19 +31,33 @@ QUALITY = "720p60,720p,480p,best"
 KEYWORDS = [k.strip() for k in E("LIVE_KEYWORDS", "oh my god,what the,no way,holy,let's go,lets go,wtf,bro what,"
             "caralho,nossa,meu deus,mano do céu,kkkk,não acredito,que isso,socorro").split(",") if k.strip()]
 LIVE_WHISPER = E("LIVE_WHISPER_MODEL", "base")  # mais leve que o "small" dos cortes: a live precisa acompanhar o tempo real
-_whisper_lock = threading.Lock(); _whisper = {}
+WHISPER_WORKERS = int(E("LIVE_WHISPER_WORKERS", "2"))  # instâncias do modelo em paralelo (cada uma ~150 MB com int8)
+_whisper_lock = threading.Lock(); _whisper_free = []; _whisper_made = 0
+_whisper_slots = threading.BoundedSemaphore(WHISPER_WORKERS)
+EVENT_TRANSCRIBE_DB = float(E("LIVE_EVENT_TRANSCRIBE_DB", str(AUDIO_DB - 3)))  # modo "events": só blocos com pico ≥ este excesso
 
 
 def transcribe(path, dur, lang):
-    """Mesmo pipeline do motor (faster-whisper, VAD, timestamps por palavra), com modelo próprio para a live."""
+    """Mesmo pipeline do motor (faster-whisper, VAD, timestamps por palavra), com modelo próprio para a live.
+    Até WHISPER_WORKERS transcrições simultâneas (uma instância de modelo por vaga) para várias transmissões no mesmo agente."""
+    global _whisper_made
     from faster_whisper import WhisperModel
-    with _whisper_lock:
-        m = _whisper.get(LIVE_WHISPER) or _whisper.setdefault(LIVE_WHISPER, WhisperModel(LIVE_WHISPER, compute_type="int8",
-                                                                                        cpu_threads=int(E("LIVE_WHISPER_THREADS", "2"))))
-        raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-ac", "1", "-ar", "16000", "-f", "f32le", "-"],
-                             capture_output=True, check=True, timeout=60).stdout
-        segs, info = m.transcribe(np.frombuffer(raw, np.float32), language=lang, word_timestamps=True, vad_filter=True)
-        return [{"w": w.word.strip(), "s": round(w.start, 2), "e": round(w.end, 2)} for g in segs for w in (g.words or [])], info.language
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-ac", "1", "-ar", "16000", "-f", "f32le", "-"],
+                         capture_output=True, check=True, timeout=60).stdout
+    with _whisper_slots:
+        with _whisper_lock:
+            if _whisper_free: m = _whisper_free.pop()
+            else:
+                _whisper_made += 1
+                m = WhisperModel(LIVE_WHISPER, compute_type="int8", cpu_threads=int(E("LIVE_WHISPER_THREADS", "2")))
+        try:
+            # beam 1 + sem condicionar no texto anterior + bloqueio de n-gramas repetidos: ~6x menos CPU que o padrão no mesmo
+            # bloco (medido: 15,6 s → 2,4 s de CPU por 10 s de áudio) e sem as alucinações repetitivas do "ha ha ha…"
+            segs, info = m.transcribe(np.frombuffer(raw, np.float32), language=lang, word_timestamps=True, vad_filter=True,
+                                      beam_size=1, condition_on_previous_text=False, no_repeat_ngram_size=3)
+            return [{"w": w.word.strip(), "s": round(w.start, 2), "e": round(w.end, 2)} for g in segs for w in (g.words or [])], info.language
+        finally:
+            with _whisper_lock: _whisper_free.append(m)
 _stop = False
 
 
@@ -54,10 +68,23 @@ def ffprobe_duration(p):
     except ValueError: return 0.0
 
 
-def visual_change(p, fps=2):
-    """Diferença média entre frames consecutivos (64x36, cinza) — 1 valor a cada 1/fps s."""
-    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(p), "-vf", f"fps={fps},scale=64:36,format=gray", "-f", "rawvideo", "-"],
-                         capture_output=True, timeout=60).stdout
+VISUAL_FULL_MAX = int(E("LIVE_VISUAL_FULL_MAX", "3"))  # acima disto (sessões no mesmo agente), a imagem é medida só nos quadros-chave
+ACTIVE_RUNNERS = [0]
+
+
+def visual_change(p, fps=2, preview=None, keyframes=False):
+    """Diferença média entre frames consecutivos (64x36, cinza) — 1 valor a cada 1/fps s.
+    keyframes=True decodifica só os quadros-chave (~1 a cada 2 s na Twitch): ~8x menos CPU, resolução temporal menor.
+    Com preview=<arquivo>, a MESMA decodificação grava o último frame amostrado (480 px) como preview real da transmissão."""
+    args = ["ffmpeg", "-v", "error"] + (["-skip_frame", "nokey"] if keyframes else []) + ["-i", str(p)]
+    pick = "" if keyframes else f"fps={fps},"
+    sync = ["-fps_mode", "passthrough"] if keyframes else []
+    if preview:
+        args += ["-filter_complex", f"[0:v]{pick}split=2[a][b];[a]scale=64:36,format=gray[g];[b]scale=480:-2[p]",
+                 "-map", "[g]", *sync, "-f", "rawvideo", "pipe:1", "-map", "[p]", *sync, "-q:v", "6", "-update", "1", "-f", "image2", str(preview)]
+    else:
+        args += ["-vf", f"{pick}scale=64:36,format=gray", *sync, "-f", "rawvideo", "-"]
+    raw = subprocess.run(args, capture_output=True, timeout=60).stdout
     fr = np.frombuffer(raw, np.uint8)[: len(raw) // 2304 * 2304].reshape(-1, 2304).astype(np.float32)
     if len(fr) < 2: return np.zeros(max(1, len(fr)))
     return np.concatenate([[0.0], np.abs(np.diff(fr, axis=0)).mean(1)])
@@ -74,6 +101,10 @@ def recorder_cmd(channel, out_dir):
     q = shlex.quote; pattern = q(str(out_dir / "seg_%06d.ts"))
     seg = f"-c copy -f segment -segment_time {int(SEG_S)} -reset_timestamps 1 {pattern}"
     src = E("LIVE_SOURCE_OVERRIDE")  # SOMENTE testes simulados: arquivo local tocado em tempo real como se fosse live
+    if src and pathlib.Path(src).is_dir():  # pasta de fixtures: <canal>.mp4 se existir, senão um arquivo escolhido pelo nome do canal
+        files = sorted(f for f in pathlib.Path(src).iterdir() if f.suffix.lower() in (".mp4", ".mov", ".mkv", ".ts"))
+        named = [f for f in files if f.stem == channel]
+        src = str(named[0] if named else files[sum(map(ord, channel or "x")) % len(files)])
     if src:
         return f"exec ffmpeg -hide_banner -loglevel error -re -stream_loop -1 -i {q(src)} -map 0:v:0 -map 0:a:0 {seg}"
     if not re.fullmatch(r"[A-Za-z0-9_]{3,25}", channel or ""):  # verificação explícita (não some com python -O)
@@ -102,6 +133,21 @@ def kill_group(pgid):
 
 
 
+def ensure_words(c, sid, sdir, lang, a, b):
+    """Transcrição sob demanda: blocos da janela [a, b] ainda não transcritos (modo "events") são transcritos agora,
+    com o mesmo modelo, e gravados no banco. Idempotente (UPDATE ... WHERE transcribed=0)."""
+    rows = c.execute("SELECT seq, path, t_start, duration FROM live_segments WHERE session_id=? AND transcribed=0 AND deleted=0 "
+                     "AND duration>0 AND t_start<? AND t_start+duration>? ORDER BY seq", (sid, b, a)).fetchall()
+    for x in rows:
+        f = sdir / x["path"]
+        if not f.exists(): continue
+        raw, _ = transcribe(f, x["duration"], None if lang == "auto" else lang)
+        words = [{"w": w["w"], "s": round(x["t_start"] + w["s"], 2), "e": round(x["t_start"] + w["e"], 2)} for w in raw]
+        c.execute("UPDATE live_segments SET words=?, text=?, transcribed=1 WHERE session_id=? AND seq=? AND transcribed=0",
+                  (json.dumps(words), " ".join(w["w"] for w in words), sid, x["seq"]))
+    return len(rows)
+
+
 STALE_ANALYSIS_S = float(E("LIVE_CLAUDE_TIMEOUT", "90")) * 2 + 30  # chamada + 1 retentativa do SDK + folga
 
 
@@ -114,7 +160,7 @@ class Runner(threading.Thread):
         super().__init__(daemon=True, name=f"live-{sid}"); self.sid = sid; self.proc = None; self.run_dir = None
         self.audio_hist = deque(maxlen=int(300 / 0.5)); self.vis_hist = deque(maxlen=int(300 / 0.5))
         self.last_peak = -1e9; self.layout = None; self.down_since = None; self.analyzer = None; self.done = False
-        self.last_try = 0; self.proc_started = 0
+        self.last_try = 0; self.proc_started = 0; self._qcheck = 0; self.vis_step = 0.5
 
     # ------------------------------------------------------------------ ciclo
     def run(self):
@@ -174,12 +220,18 @@ class Runner(threading.Thread):
                     c.execute("UPDATE projects SET status='done', updated_at=? WHERE id=? AND status='live'", (db.now(), s["project_id"]))
                     store.event(c, s, "stopped", {"reason": "error"}, s["recorded_s"])
             shutil.rmtree(self.dir / "segments", ignore_errors=True)
+            for f in self.dir.glob("preview*.jpg"): f.unlink(missing_ok=True)
         except Exception:
             log.exception("fail_safe falhou (sessão %s)", self.sid)
 
     def limit_reached(self, s):
+        if db.now() - self._qcheck >= 10:  # franquia mensal / plano ativo (o uso é somado a cada bloco gravado)
+            self._qcheck = db.now(); u = self.c.execute("SELECT * FROM users WHERE id=?", (s["user_id"],)).fetchone()
+            q = plans.live_quota_left(self.c, u) if u else None
+            if q is None: return "plan"
+            if q[0] <= 0: return "quota"
         if s["recorded_s"] >= s["max_minutes"] * 60: return "duration"
-        if s["spent_usd"] >= s["budget_usd"]: return "budget"
+        if s["budget_usd"] > 0 and s["spent_usd"] >= s["budget_usd"]: return "budget"  # orçamento 0 = sessão sem IA (não para)
         if s["calls"] >= s["max_calls"]: return "calls"
         if s["started_at"] and db.now() - s["started_at"] > s["max_minutes"] * 60 + OFFLINE_S + 120: return "duration"
         return None
@@ -260,10 +312,17 @@ class Runner(threading.Thread):
                            "VALUES(?,?,?,?,?,0,?,1,?)", (self.sid, s["user_id"], self.next_seq(), rel, self.next_t0(), db.now(), db.now()))
             f.unlink(missing_ok=True); return
         wall_start = f.stat().st_mtime - dur
-        dbs = engine.detect.loudness(f, 0.5); vis = visual_change(f)
-        base_a = float(np.median(self.audio_hist)) if len(self.audio_hist) >= 60 else -99.0
-        quiet = len(dbs) and float(dbs.max()) < base_a + AUDIO_DB - 3
-        if backlog >= 2 and quiet:  # modo recuperação: com fila acumulada, pula a transcrição de blocos sem pico de áudio
+        prev = store.preview_path(s["user_id"], s["id"]).with_suffix(".part.jpg")
+        kf = ACTIVE_RUNNERS[0] > VISUAL_FULL_MAX
+        dbs = engine.detect.loudness(f, 0.5); vis = visual_change(f, preview=prev, keyframes=kf)
+        self.vis_step = (dur / max(len(vis), 1)) if kf else 0.5
+        # linha de base do áudio: mediana móvel de 5 min; nos primeiros 30 s, a mediana do próprio bloco
+        base_a = float(np.median(self.audio_hist)) if len(self.audio_hist) >= 60 else (float(np.median(dbs)) if len(dbs) else -99.0)
+        excess = float(dbs.max()) - base_a if len(dbs) else 0.0
+        quiet = len(dbs) and excess < AUDIO_DB - 3
+        # "events" (padrão): só transcreve blocos com pico de áudio (≥ EVENT_TRANSCRIBE_DB acima da mediana; padrão 6 dB);
+        # janelas que vão para o Claude ou viram corte são transcritas sob demanda (ensure_words). "all": todo bloco.
+        if (s["transcribe_mode"] == "events" and excess < EVENT_TRANSCRIBE_DB) or (backlog >= 2 and quiet):
             raw_words, lang, transcribed = [], s["lang"], False
         else:
             raw_words, lang = transcribe(f, dur, None if s["lang"] == "auto" else s["lang"]); transcribed = True
@@ -274,11 +333,16 @@ class Runner(threading.Thread):
         try:
             t0 = self.next_t0(); seq = self.next_seq()
             words = [{"w": w["w"], "s": round(t0 + w["s"], 2), "e": round(t0 + w["e"], 2)} for w in raw_words]
-            self.c.execute("INSERT INTO live_segments(session_id,user_id,seq,path,t_start,duration,wall_start,db_max,db_median,vis_max,text,words,created_at) "
-                           "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", (self.sid, s["user_id"], seq, rel, t0, dur, wall_start,
+            self.c.execute("INSERT INTO live_segments(session_id,user_id,seq,path,t_start,duration,wall_start,db_max,db_median,vis_max,text,words,"
+                           "transcribed,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (self.sid, s["user_id"], seq, rel, t0, dur, wall_start,
                            float(dbs.max()) if len(dbs) else None, float(np.median(dbs)) if len(dbs) else None,
-                           float(vis.max()) if len(vis) else None, " ".join(w["w"] for w in words), json.dumps(words), db.now()))
+                           float(vis.max()) if len(vis) else None, " ".join(w["w"] for w in words), json.dumps(words), int(transcribed), db.now()))
             self.c.execute("UPDATE live_sessions SET recorded_s=?, updated_at=? WHERE id=?", (t0 + dur, db.now(), self.sid))
+            plans.charge_live(self.c, s["user_id"], dur)  # franquia mensal consumida bloco a bloco
+            if prev.exists() and prev.stat().st_size > 0:
+                prev.replace(store.preview_path(s["user_id"], s["id"]))  # troca atômica: o navegador nunca lê arquivo pela metade
+                off = min(max(len(vis) - 1, 0) * self.vis_step, dur)
+                self.c.execute("UPDATE live_sessions SET preview_t=?, preview_wall=? WHERE id=?", (round(t0 + off, 2), wall_start + off, self.sid))
             back = self.c.execute("UPDATE live_sessions SET status='running' WHERE id=? AND status='reconnecting'", (self.sid,)).rowcount
             self.c.execute("COMMIT")
         except Exception:
@@ -289,11 +353,12 @@ class Runner(threading.Thread):
         store.event(self.c, s, "segment", {"seq": seq, "t_start": round(t0, 2), "duration": round(dur, 2),
                     "wall_start": round(wall_start, 3), "lag_s": round(db.now() - (wall_start + dur), 1),
                     "words": len(words), "db_max": round(float(dbs.max()), 1) if len(dbs) else None, "lang": lang,
-                    "transcribed": transcribed, "backlog": backlog}, t0)
+                    "transcribed": transcribed, "backlog": backlog, "bytes": f.stat().st_size, "visual": "keyframes" if kf else "2fps"}, t0)
         self.detect(s, t0, dur, dbs, vis, words, wall_start)
 
     def detect(self, s, t0, dur, dbs, vis, words, wall_start):
-        n = min(len(dbs), int(dur / 0.5) + 1); vis = np.interp(np.arange(n) * 0.5, np.arange(len(vis)) * 0.5, vis) if len(vis) > 1 else np.zeros(n)
+        n = min(len(dbs), int(dur / 0.5) + 1)
+        vis = np.interp(np.arange(n) * 0.5, np.arange(len(vis)) * self.vis_step, vis) if len(vis) > 1 else np.zeros(n)
         base_a = np.median(self.audio_hist) if len(self.audio_hist) >= 60 else float(np.median(dbs[:n])) if n else -60
         hv = np.array(self.vis_hist) if len(self.vis_hist) >= 20 else vis
         med_v = float(np.median(hv)) if len(hv) else 0; mad_v = float(np.median(np.abs(hv - med_v))) + 0.5
@@ -348,6 +413,13 @@ class Runner(threading.Thread):
     def create_clip(self, s, m):
         dec = json.loads(m["decision"]) if m["decision"] else {}
         a, b = (dec["start_t"], dec["end_t"]) if dec.get("decision") == "clip" else (m["w_start"], m["w_end"])
+        u = self.c.execute("SELECT * FROM users WHERE id=?", (s["user_id"],)).fetchone()
+        q = plans.live_quota_left(self.c, u) if u else None
+        if not q or q[1] <= 0:
+            msg = "Franquia de cortes do mês esgotada." if q else "Conta sem plano ativo."
+            self.c.execute("UPDATE live_moments SET status='clip_failed', error=?, updated_at=? WHERE id=? AND clip_id=''", (msg, db.now(), m["id"]))
+            store.event(self.c, s, "clip_failed", {"moment_id": m["id"], "error": msg}, m["peak"]); return
+        ensure_words(self.c, self.sid, self.dir, s["lang"], a, b)
         segs = self.segments_for(a, b)
         if not segs or any(x["deleted"] for x in segs) or segs[0]["t_start"] > a + 0.5:
             self.c.execute("UPDATE live_moments SET status='clip_failed', error=?, updated_at=? WHERE id=? AND clip_id=''",
@@ -381,6 +453,7 @@ class Runner(threading.Thread):
                            "VALUES(?,?,?,?,?,?,?,?,?,?,'queued',?,?)", (cid, s["user_id"], s["project_id"], idx, a, b, m["peak"], m["score"],
                            json.dumps(data), json.dumps(cp, ensure_ascii=False), t, t))
             enqueue(self.c, s["user_id"], "render", s["project_id"], cid)
+            plans.count_live_clip(self.c, s["user_id"])
             self.c.execute("UPDATE live_moments SET status='clip_queued', clip_id=?, updated_at=? WHERE id=?", (cid, t, m["id"]))
             self.c.execute("COMMIT")
         except Exception:
@@ -412,9 +485,9 @@ class Runner(threading.Thread):
             (self.dir / x["path"]).unlink(missing_ok=True)
         self.c.execute("UPDATE live_segments SET deleted=1 WHERE session_id=?", (self.sid,))
         shutil.rmtree(self.dir / "segments", ignore_errors=True)
+        for f in self.dir.glob("preview*.jpg"): f.unlink(missing_ok=True)  # retenção: nada da transmissão bruta fica após encerrar
         store.update_session(self.c, self.sid, status="stopped", stopped_at=db.now(), locked_until=0, recorder_pgid=0)
         self.c.execute("UPDATE projects SET status='done', updated_at=? WHERE id=? AND status='live'", (db.now(), s["project_id"]))
-        plans.charge(self.c, s["user_id"], s["recorded_s"])
         store.event(self.c, s, "stopped", {"reason": reason, "recorded_s": round(s["recorded_s"], 1), "calls": s["calls"],
                                            "spent_usd": round(s["spent_usd"], 4)}, s["recorded_s"])
         log.info("sessão %s encerrada (%s)", self.sid, reason)
@@ -440,6 +513,8 @@ class Analyzer(threading.Thread):
         ready = c.execute("SELECT * FROM live_moments WHERE session_id=? AND status='ready' ORDER BY peak", (self.sid,)).fetchall()
         if not ready: return False
         st, detail = claude_live.status()
+        if st == "ready" and s["budget_usd"] <= 0:  # o usuário escolheu orçamento zero: nenhuma chamada à IA nesta sessão
+            st, detail = "disabled", "Análise de IA desligada nesta sessão (orçamento de US$ 0)."
         if st != "ready":
             for m in ready:
                 if c.execute("UPDATE live_moments SET status='candidate', error=?, updated_at=? WHERE id=? AND status='ready'",
@@ -493,16 +568,27 @@ class Analyzer(threading.Thread):
         return "\n".join(f"[t={g[0]['s']:.1f}] " + " ".join(x["w"] for x in g) for g in lines)
 
     def charge(self, cost, calls=1):
-        """Gasto/chamadas somados no banco (atômico: não perde atualização entre threads/agentes)."""
+        """Gasto/chamadas somados no banco (atômico: não perde atualização entre threads/agentes) e na franquia mensal de IA."""
         self.c.execute("UPDATE live_sessions SET spent_usd=ROUND(spent_usd+?, 6), calls=calls+?, updated_at=? WHERE id=?",
                        (cost, calls, db.now(), self.sid))
+        if cost:
+            uid = self.c.execute("SELECT user_id FROM live_sessions WHERE id=?", (self.sid,)).fetchone()[0]
+            plans.charge_ai(self.c, uid, cost)
 
     def analyze(self, s, m):
         c = self.c; frac = s["spent_usd"] / max(s["budget_usd"], 1e-9)
         n = 3 if frac < 0.5 else 2 if frac < 0.8 else 1  # redução de frames conforme o orçamento é consumido
+        ensure_words(c, self.sid, store.session_dir(s["user_id"], s["id"]), s["lang"], max(0, m["w_start"] - 90), m["w_end"])
         frames = self.frames(s, m, n); text = self.transcript(m["w_start"], m["w_end"])
         ctx = self.transcript(max(0, m["w_start"] - 90), m["w_start"])[-1500:]
         est = claude_live.estimate(len(frames), len(text) + len(ctx))
+        u = c.execute("SELECT * FROM users WHERE id=?", (s["user_id"],)).fetchone()
+        if not u or plans.ai_left(c, u) < est:  # teto mensal de IA do plano: o momento fica como candidato; a gravação continua
+            msg = "Orçamento mensal de IA do plano esgotado."
+            if c.execute("UPDATE live_moments SET status='candidate', error=?, updated_at=? WHERE id=? AND status='ready'", (msg, db.now(), m["id"])).rowcount:
+                store.event(c, s, "analysis_skipped", {"moment_id": m["id"], "reason": msg, "estimate_usd": est}, m["peak"])
+            store.update_session(c, self.sid, claude_state="disabled", claude_detail=msg)
+            return
         if s["spent_usd"] + est > s["budget_usd"] or s["calls"] + 1 > s["max_calls"]:
             reason = "budget" if s["spent_usd"] + est > s["budget_usd"] else "calls"
             c.execute("UPDATE live_moments SET status='skipped', error=?, updated_at=? WHERE id=? AND status='ready'",
@@ -567,6 +653,7 @@ def main():
     with db.conn() as c:
         while not _stop:
             for sid in [k for k, r in runners.items() if r.done]: runners.pop(sid)
+            ACTIVE_RUNNERS[0] = len(runners)
             if len(runners) < MAX_SESSIONS:
                 row = claim(c)
                 if row and row["id"] not in runners:

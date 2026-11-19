@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0b0b14">
+<title>ClipeiAki · Cortes verticais das suas lives, prontos para revisar</title>
+<meta name="description" content="O ClipeiAki monitora até 10 transmissões da Twitch ao mesmo tempo, encontra os momentos fortes e entrega cortes 1080×1920 com legenda para você revisar e baixar.">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/site/site.css">
+<script src="/static/site/site.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#inicio">Pular para o conteúdo</a>
+<header class="nav" id="topo">
+  <a class="brand" href="/" aria-label="ClipeiAki, início"><img src="/static/icon.svg" alt="" width="34" height="34">ClipeiAki</a>
+  <nav aria-label="Seções"><ul class="nav-links">
+    <li><a href="#como-funciona">Como funciona</a></li><li><a href="#modulos">Módulos</a></li>
+    <li><a href="#monitor">Live Monitor</a></li><li><a href="#planos">Planos</a></li><li><a href="#faq">Dúvidas</a></li></ul></nav>
+  <div class="nav-cta"><a class="btn ghost" href="/entrar">Entrar</a><a class="btn primary" href="#planos">Ver planos</a></div>
+</header>
+
+<main id="inicio">
+<!-- 1. HERO -->
+<section class="hero" aria-labelledby="h-hero">
+  <div class="hero-copy reveal">
+    <p class="eyebrow">Para streamers e clipadores</p>
+    <h1 id="h-hero">Sua live vira corte vertical enquanto você joga.</h1>
+    <p class="lead">O ClipeiAki acompanha suas transmissões da Twitch, encontra os picos de reação e monta cortes 1080×1920 com legenda. Você revisa e baixa.</p>
+    <div class="row"><a class="btn primary lg" href="#planos">Ver planos</a><a class="btn lg" href="#como-funciona">Como funciona</a></div>
+    <ul class="facts" aria-label="Destaques">
+      <li><strong>10</strong> lives ao mesmo tempo</li>
+      <li><strong>9:16</strong> para Shorts, Reels e TikTok</li>
+      <li><strong>Servidor</strong> grava com o PC desligado</li>
+    </ul>
+  </div>
+  <figure class="shot hero-shot reveal">
+    <img src="/static/site/media/monitor.webp" width="1600" height="1000" alt="Captura real do Live Monitor do ClipeiAki com três transmissões gravando, cada uma com preview, status, tempo monitorado e momentos candidatos" fetchpriority="high">
+    <figcaption>Captura real do app. As “lives” são trechos de <em>Tears of Steel</em> (Blender Foundation, CC BY 3.0) tocados como transmissão.</figcaption>
+  </figure>
+</section>
+
+<!-- 2. PROBLEMA -->
+<section class="band problem" aria-labelledby="h-prob">
+  <div class="wrap narrow reveal">
+    <h2 id="h-prob">Horas de live. Poucos segundos que viram corte.</h2>
+    <p>O momento bom acontece quando você está focado no jogo. Achá-lo depois exige reassistir o VOD, recortar, legendar e reenquadrar a webcam. O ClipeiAki faz isso durante a live.</p>
+  </div>
+</section>
+
+<!-- 3. COMO FUNCIONA -->
+<section class="wrap" id="como-funciona" aria-labelledby="h-how">
+  <h2 id="h-how" class="reveal">Da transmissão ao corte, em quatro etapas</h2>
+  <ol class="steps">
+    <li class="reveal"><span class="n">1</span><h3>Captura</h3><p>O servidor grava a live em blocos de 10 segundos.</p></li>
+    <li class="reveal"><span class="n">2</span><h3>Identificação</h3><p>Volume, mudança de imagem e palavras de reação viram momentos com horário.</p></li>
+    <li class="reveal"><span class="n">3</span><h3>Edição</h3><p>Corte, webcam enquadrada, legenda e formato vertical.</p></li>
+    <li class="reveal"><span class="n">4</span><h3>Entrega</h3><p>Preview, ajuste de título e legenda, aprovação e download.</p></li>
+  </ol>
+</section>
+
+<!-- 4. MÓDULOS -->
+<section class="wrap" id="modulos" aria-labelledby="h-mod">
+  <h2 id="h-mod" class="reveal">Módulos</h2>
+  <p class="sub reveal">Status real de cada parte hoje.</p>
+  <div class="mods">
+    <article class="mod reveal"><span class="st ok">Disponível</span><h3>Live Monitor</h3><p>Várias lives da Twitch numa grade, com preview e status.</p></article>
+    <article class="mod reveal"><span class="st ok">Disponível</span><h3>Detecção de momentos</h3><p>Áudio, imagem e fala analisados no servidor.</p></article>
+    <article class="mod reveal"><span class="st soon">Requer ativação</span><h3>Análise com Claude</h3><p>A IA recebe frames e fala dos picos e propõe o corte. Você vê cada frame enviado.</p></article>
+    <article class="mod reveal"><span class="st ok">Disponível</span><h3>Editor automático</h3><p>Corte, webcam, legenda karaokê; zoom e efeitos no Studio.</p></article>
+    <article class="mod reveal"><span class="st part">Parcial</span><h3>Templates</h3><p>Moldura com seu @. Identidade visual própria em desenvolvimento.</p></article>
+    <article class="mod reveal"><span class="st ok">Disponível</span><h3>Preview</h3><p>Assista e edite antes de aprovar.</p></article>
+    <article class="mod reveal"><span class="st ok">Disponível</span><h3>Biblioteca</h3><p>Cortes aprovados, downloads e texto do post.</p></article>
+    <article class="mod reveal"><span class="st ok">Beta</span><h3>Integração MCP</h3><p>Controle o monitor por chat com o Claude.</p></article>
+    <article class="mod reveal"><span class="st ok">Disponível</span><h3>Exportação</h3><p>MP4 1080×1920 para Shorts, Reels e TikTok.</p></article>
+  </div>
+</section>
+
+<!-- 5. MONITORAMENTO SIMULTÂNEO -->
+<section class="band" id="monitor" aria-labelledby="h-mon">
+  <div class="wrap split">
+    <div class="reveal">
+      <h2 id="h-mon">Várias lives, uma tela</h2>
+      <ul class="checks">
+        <li>Creator acompanha até <strong>3</strong> transmissões; Creator Studio, até <strong>10</strong>.</li>
+        <li>Cada tela mostra o último frame gravado, status, tempo monitorado e momentos.</li>
+        <li>Se a live cair, o agente reconecta sozinho.</li>
+        <li>Pelo MCP, o Claude consulta o status e aprova cortes por chat.</li>
+      </ul>
+    </div>
+    <figure class="shot reveal">
+      <img src="/static/site/media/mcp.webp" width="1200" height="760" loading="lazy" alt="Resposta real da ferramenta list_connected_streamers do servidor MCP do ClipeiAki com as transmissões, slots e uso do mês">
+      <figcaption>Resposta real do servidor MCP (ambiente de teste).</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- 6. EXEMPLOS REAIS -->
+<section class="wrap" id="exemplos" aria-labelledby="h-ex">
+  <h2 id="h-ex" class="reveal">O que sai do editor</h2>
+  <div class="ex">
+    <figure class="shot reveal"><img src="/static/site/media/antes.webp" width="1280" height="720" loading="lazy" alt="Quadro original horizontal do trecho usado no exemplo"><figcaption>Entrada horizontal.</figcaption></figure>
+    <figure class="shot vert reveal"><video src="/static/site/media/exemplo.mp4" poster="/static/site/media/depois.webp" width="540" height="960" controls muted playsinline preload="none"></video>
+      <figcaption>Saída real: 1080×1920 com legenda.</figcaption></figure>
+    <figure class="shot vert reveal"><img src="/static/site/media/estudio.webp" width="720" height="1100" loading="lazy" alt="Tela real de revisão do corte no ClipeiAki com preview, título e botões de aprovar e editar"><figcaption>Revisão no app.</figcaption></figure>
+  </div>
+  <p class="credit reveal">Fonte: <em>Tears of Steel</em>, © Blender Foundation (mango.blender.org), CC BY 3.0. Legenda no idioma original.</p>
+</section>
+
+<!-- 7. PLANOS -->
+<section class="band" id="planos" aria-labelledby="h-plans">
+  <div class="wrap">
+    <h2 id="h-plans" class="reveal">Planos</h2>
+    <p class="sub reveal">Cobrança mensal pela Cakto. Cancele quando quiser; o acesso segue até o fim do período pago. Reembolso integral em até 7 dias.</p>
+    <div class="plans"><article class="plan reveal" aria-labelledby="pl-creator">
+      
+      <h3 id="pl-creator">Creator</h3>
+      <div class="price">R$ 49,90 <small>/mês</small></div>
+      <ul><li><strong>3</strong> lives ao mesmo tempo</li><li>60 h e 150 cortes de live por mês</li><li>30 vídeos enviados por mês</li></ul>
+      <a class="btn lg" href="/criar-conta" data-plan="creator" data-label="Creator">Criar conta · assinaturas em breve</a>
+      </article><article class="plan reveal featured" aria-labelledby="pl-studio">
+      <span class="tag">Para quem acompanha vários canais</span>
+      <h3 id="pl-studio">Creator Studio</h3>
+      <div class="price">R$ 69,90 <small>/mês</small></div>
+      <ul><li><strong>10</strong> lives ao mesmo tempo</li><li>200 h e 500 cortes de live por mês</li><li>60 vídeos enviados por mês</li><li>Zoom e efeitos sonoros</li></ul>
+      <a class="btn primary lg" href="/criar-conta" data-plan="studio" data-label="Creator Studio">Criar conta · assinaturas em breve</a>
+      </article></div>
+    <div class="tbl-wrap reveal"><table class="cmp"><caption>Comparação completa</caption><thead><tr><th scope="col">Recurso</th><th scope="col">Creator</th><th scope="col">Creator Studio</th></tr></thead><tbody><tr><th scope="row">Preço</th><td>R$ 49,90/mês</td><td class="hi">R$ 69,90/mês</td></tr><tr><th scope="row">Transmissões simultâneas</th><td>3</td><td class="hi">10</td></tr><tr><th scope="row">Horas de monitoramento por mês</th><td>60 h</td><td class="hi">200 h</td></tr><tr><th scope="row">Cortes de live por mês</th><td>150</td><td class="hi">500</td></tr><tr><th scope="row">Duração máxima por sessão</th><td>2 h</td><td class="hi">4 h</td></tr><tr><th scope="row">Teto mensal de gasto com IA (quando ativada)</th><td>US$ 2,00</td><td class="hi">US$ 4,00</td></tr><tr><th scope="row">Vídeos enviados por mês</th><td>30 · 600 min</td><td class="hi">60 · 1.500 min</td></tr><tr><th scope="row">Duração e tamanho por vídeo</th><td>90 min · 2 GB</td><td class="hi">180 min · 4 GB</td></tr><tr><th scope="row">Cortes sugeridos por vídeo enviado</th><td>6</td><td class="hi">10</td></tr><tr><th scope="row">Legenda karaokê, webcam e moldura com @</th><td>Incluído</td><td class="hi">Incluído</td></tr><tr><th scope="row">Zoom no pico e efeitos sonoros</th><td>—</td><td class="hi">Incluído</td></tr><tr><th scope="row">Exportação</th><td>MP4 1080×1920, 30 fps</td><td class="hi">MP4 1080×1920, 30 fps</td></tr><tr><th scope="row">Preview, Biblioteca e downloads</th><td>Incluído</td><td class="hi">Incluído</td></tr><tr><th scope="row">Integração MCP (beta)</th><td>Incluído</td><td class="hi">Incluído</td></tr><tr><th scope="row">Cancelamento</th><td>A qualquer momento, sem multa</td><td class="hi">A qualquer momento, sem multa</td></tr></tbody></table></div>
+  </div>
+</section>
+
+<!-- 8. FAQ -->
+<section class="wrap narrow" id="faq" aria-labelledby="h-faq">
+  <h2 id="h-faq" class="reveal">Dúvidas frequentes</h2>
+  <div class="faq">
+    <details class="reveal"><summary>Preciso deixar o navegador aberto?</summary><p>Não. Tudo roda no servidor.</p></details>
+    <details class="reveal"><summary>Quais plataformas são suportadas?</summary><p>Twitch. Outras plataformas estão em desenvolvimento.</p></details>
+    <details class="reveal"><summary>A IA assiste à live inteira?</summary><p>Não. Só frames e falas dos picos vão para a IA, quando ativa.</p></details>
+    <details class="reveal"><summary>Posso monitorar o canal de outra pessoa?</summary><p>Só com autorização do titular, declarada ao conectar.</p></details>
+    <details class="reveal"><summary>O monitoramento é ilimitado ou 24 horas?</summary><p>Não. Há duração por sessão e franquia mensal.</p></details>
+    <details class="reveal"><summary>Os cortes são postados automaticamente?</summary><p>Não. Você aprova, baixa e posta.</p></details>
+    <details class="reveal"><summary>Como cancelo?</summary><p>Na Cakto ou pelo suporte, sem multa.</p></details>
+  </div>
+</section>
+
+<!-- 9. CTA FINAL -->
+<section class="cta-final" aria-labelledby="h-cta">
+  <div class="wrap narrow reveal">
+    <h2 id="h-cta">Seu próximo corte já está acontecendo na live.</h2>
+    <div class="row center"><a class="btn primary lg" href="#planos">Ver planos</a><a class="btn lg" href="/criar-conta">Criar conta</a></div>
+  </div>
+</section>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-grid">
+    <div><a class="brand" href="/"><img src="/static/icon.svg" alt="" width="28" height="28">ClipeiAki</a>
+      <p class="muted">Um serviço da Eclyss. Razão social, CNPJ e endereço: <span class="pend">PENDENTE_DADO_EMPRESARIAL</span>.</p></div>
+    <nav aria-label="Documentos jurídicos"><ul>
+      <li><a href="/termos">Termos de Uso</a></li><li><a href="/privacidade">Política de Privacidade</a></li>
+      <li><a href="/cancelamento">Cancelamento e reembolso</a></li><li><a href="/conteudo">Conteúdo e direitos de terceiros</a></li>
+      <li><a href="/cookies">Cookies</a></li><li><a href="/regras-live-ia">Regras do Live Monitor e IA</a></li><li><a href="/contato">Contato e exclusão de dados</a></li></ul></nav>
+  </div>
+  <p class="wrap disclaimer">ClipeiAki não é afiliado, patrocinado ou endossado pela Twitch, YouTube, TikTok, Meta, Anthropic, Rockstar Games ou Take-Two Interactive. As marcas pertencem aos seus titulares.</p>
+</footer>
+</body>
+</html>

@@ -8,7 +8,7 @@ live:read, live:control, clips:read, clips:write. Todas as consultas são filtra
 
   HTTP:  servido pelo app web em <PUBLIC_URL>/mcp
   stdio: CLIPEIAKI_TOKEN=cak_... VM_DATA_DIR=... python -m web.mcp_server"""
-import asyncio, json, logging, os, sys
+import asyncio, hashlib, json, logging, os, sys, threading, time
 from urllib.parse import urlparse
 from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
@@ -16,12 +16,13 @@ from mcp.server.auth.provider import AccessToken
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.types import ToolAnnotations
-from . import db, tokens
+from mcp.server.mcpserver.utilities.types import Image
+from . import db, tokens, legal
 from .live import service
 
 log = logging.getLogger("mcp")
 PUBLIC_URL = os.environ.get("PUBLIC_URL", "http://localhost:8000").rstrip("/")
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 _stdio = None  # (user_id, scopes) quando rodando por stdio
 
 
@@ -38,9 +39,11 @@ class TokenVerifier:
 
 mcp = MCPServer(
     "ClipeiAki Live MCP", version=VERSION,
-    instructions="Controla o Claude Live Agent do ClipeiAki: consulta canais da Twitch, inicia/para o monitoramento, lê o "
-                 "contexto recente (transcrição com timestamps), lista momentos detectados e as decisões do Claude, cria cortes "
-                 "pelo motor de render e acompanha a renderização. Timestamps t_* são segundos da gravação da sessão.",
+    instructions="Controla o Live Monitor do ClipeiAki (conta do dono do token): transmissões conectadas (slots do plano), "
+                 "início/parada do monitoramento, estado e preview REAL (último frame gravado), momentos detectados por áudio/imagem/"
+                 "palavras, evidências (frames enviados ao Claude com SHA-256, transcrição, decisão), criação e aprovação de cortes e "
+                 "fila de render. O monitoramento roda no Live Agent do servidor; este chat não assiste ao vídeo continuamente. "
+                 "Timestamps t_* são segundos da gravação da sessão; wall_at é horário UTC (epoch).",
     token_verifier=TokenVerifier(),
     auth=AuthSettings(issuer_url=PUBLIC_URL, resource_server_url=f"{PUBLIC_URL}/mcp", required_scopes=None,
                       validate_token_resource=True))
@@ -48,12 +51,28 @@ mcp = MCPServer(
 RO = ToolAnnotations(read_only_hint=True)
 
 
+# Limite de requisições por token (janela deslizante de 60 s, em memória do processo). Escrita/controle têm limite menor.
+RATE = {"read": int(os.environ.get("MCP_RATE_READ", "120")), "write": int(os.environ.get("MCP_RATE_WRITE", "20"))}
+_calls, _calls_lock = {}, threading.Lock()
+
+
+def _rate(key, kind):
+    now = time.time()
+    with _calls_lock:
+        v = [t for t in _calls.get((key, kind), []) if now - t < 60]
+        if len(v) >= RATE[kind]:
+            raise ToolError(f"Limite de {RATE[kind]} chamadas por minuto ({'controle/escrita' if kind == 'write' else 'leitura'}) atingido. Aguarde.")
+        v.append(now); _calls[(key, kind)] = v
+        if len(_calls) > 20000: _calls.clear()
+
+
 def principal(scope: str) -> str:
     tok = get_access_token()
-    if tok: uid, scopes = tok.client_id, tok.scopes
-    elif _stdio: uid, scopes = _stdio
+    if tok: uid, scopes, key = tok.client_id, tok.scopes, hashlib.sha256(tok.token.encode()).hexdigest()[:16]
+    elif _stdio: (uid, scopes), key = _stdio, "stdio"
     else: raise ToolError("Não autenticado: envie um token pessoal do ClipeiAki.")
     if scope not in scopes: raise ToolError(f"Este token não tem o escopo '{scope}'.")
+    _rate(key, "read" if scope.endswith(":read") else "write")
     return uid
 
 
@@ -64,6 +83,77 @@ def run(fn, *a, **kw):
         raise ToolError(str(e))
 
 
+def user_row(c, uid):
+    return c.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
+
+
+def need_terms(c, uid):
+    if legal.status(c, uid)["required"]:
+        raise service.LiveError("Aceite a versão atual dos Termos de Uso no app do ClipeiAki antes de usar esta ação.", 428)
+
+
+# ---------------------------------------------------------------- leitura (live:read)
+@mcp.tool(annotations=RO)
+def list_connected_streamers() -> dict:
+    """Transmissões conectadas à conta (um slot do plano cada): canal, plataforma, estado (live, starting, reconnecting,
+    paused, offline, error, limit, idle), tempo monitorado, momentos candidatos e cortes. Inclui slots do plano e uso do mês.
+    Escopo live:read."""
+    uid = principal("live:read")
+    return run(lambda c: service.monitor(c, user_row(c, uid)))
+
+
+@mcp.tool(annotations=RO)
+def get_live_status(stream_id: str | None = None) -> dict:
+    """Estado atual de uma transmissão conectada (ou de todas, sem stream_id): sessão, agente ativo, segundos gravados,
+    candidatos, último evento real, uso do orçamento de IA e conexão com o Claude. Escopo live:read."""
+    uid = principal("live:read")
+    def go(c):
+        if not stream_id: return service.monitor(c, user_row(c, uid))
+        st = service.stream_out(c, service.own_stream(c, uid, stream_id))
+        if st["session"]: st["session_detail"] = service.get(c, uid, st["session"]["id"], full=False)
+        return st
+    return run(go)
+
+
+@mcp.tool(annotations=RO)
+def get_live_preview(stream_id: str) -> list:
+    """Último frame REAL gravado da transmissão (JPEG 480 px, extraído do bloco mais recente pelo agente) com o tempo da
+    gravação (t_stream) e a idade em segundos. Não é um frame ao vivo do player: reflete o que o servidor gravou. Escopo live:read."""
+    uid = principal("live:read")
+    path, meta = run(lambda c: service.preview(c, uid, stream_id))
+    return [meta, Image(data=path.read_bytes(), format="jpeg")]
+
+
+@mcp.tool(annotations=RO)
+def list_detected_moments(stream_id: str | None = None, session_id: str | None = None, status: str | None = None) -> list[dict]:
+    """Momentos candidatos detectados localmente (pico de áudio, mudança de imagem, palavras de reação) com timestamps,
+    sinais medidos e a decisão do Claude quando houve análise. Informe stream_id (sessão atual/última) ou session_id. Escopo live:read."""
+    uid = principal("live:read")
+    return run(lambda c: service.moments(c, uid, service.resolve_session(c, uid, session_id, stream_id), status))
+
+
+@mcp.tool(annotations=RO)
+def get_highlight(moment_id: str, include_frames: bool = True) -> list:
+    """Evidências reais de um momento: janela, sinais medidos, transcrição da janela, decisão validada do Claude
+    (confiança, início/fim, justificativa), frames que FORAM enviados ao Claude (com SHA-256; até 3 imagens anexadas)
+    e o corte gerado. Escopo live:read."""
+    uid = principal("live:read")
+    def go(c):
+        h = service.highlight(c, uid, moment_id); imgs = []
+        if include_frames:
+            for f in h["frames_sent_to_claude"][:3]:
+                p, _ = service.frame_path(c, uid, f["id"]); imgs.append(Image(data=p.read_bytes(), format="jpeg"))
+        return [h, *imgs]
+    return run(go)
+
+
+@mcp.tool(annotations=RO)
+def get_recent_context(session_id: str | None = None, stream_id: str | None = None, seconds: float = 120) -> dict:
+    """Transcrição dos últimos segundos gravados (blocos já transcritos), com t_start e horário UTC. Escopo live:read."""
+    uid = principal("live:read")
+    return run(lambda c: service.recent_context(c, uid, service.resolve_session(c, uid, session_id, stream_id), seconds))
+
+
 @mcp.tool(annotations=RO)
 def check_channel(channel: str) -> dict:
     """Consulta na Twitch se um canal está ao vivo agora (título, categoria, qualidades). Escopo live:read."""
@@ -72,73 +162,82 @@ def check_channel(channel: str) -> dict:
     except service.LiveError as e: raise ToolError(str(e))
 
 
-@mcp.tool(annotations=RO)
-def list_sessions(limit: int = 20) -> list[dict]:
-    """Lista suas sessões de monitoramento (mais recentes primeiro), com estado, custo e conexão com o Claude. Escopo live:read."""
-    uid = principal("live:read"); return run(lambda c: service.list_sessions(c, uid, max(1, min(limit, 100))))
-
-
-@mcp.tool(annotations=RO)
-def get_session(session_id: str) -> dict:
-    """Detalhes de uma sessão: estado, orçamento gasto, última análise do Claude (com frames enviados) e momentos. Escopo live:read."""
-    uid = principal("live:read"); return run(lambda c: service.get(c, uid, session_id))
-
-
+# ---------------------------------------------------------------- controle (live:control)
 @mcp.tool()
-def start_monitoring(channel: str, budget_usd: float | None = None, max_minutes: float | None = None, lang: str = "auto") -> dict:
-    """Inicia o monitoramento contínuo de um canal da Twitch (um canal por sessão). O orçamento de IA e a duração são
-    limitados pelo plano. A gravação e a análise rodam no Live Agent do servidor. Escopo live:control."""
+def connect_stream(channel: str, rights_basis: str) -> dict:
+    """Conecta um canal da Twitch a um slot do plano (Creator: 3, Creator Studio: 10). rights_basis é obrigatório e
+    registra a declaração do titular da conta: "owner" (sou o titular do canal) ou "authorized" (tenho autorização do
+    titular). Só use com a confirmação do usuário. Escopo live:control."""
     uid = principal("live:control")
     def go(c):
-        u = c.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
-        return service.start(c, u, channel, budget_usd, max_minutes, lang)
+        need_terms(c, uid); return service.connect_stream(c, user_row(c, uid), channel, rights_basis)
     return run(go)
 
 
 @mcp.tool(annotations=ToolAnnotations(destructive_hint=True))
-def stop_monitoring(session_id: str) -> dict:
-    """Para uma sessão de monitoramento (o agente termina a gravação e libera o buffer). Escopo live:control."""
-    uid = principal("live:control"); return run(lambda c: service.stop(c, uid, session_id))
-
-
-@mcp.tool(annotations=RO)
-def get_recent_context(session_id: str, seconds: float = 120) -> dict:
-    """Transcrição dos últimos segundos gravados, por segmento, com t_start (segundos da sessão) e horário UTC. Escopo live:read."""
-    uid = principal("live:read"); return run(lambda c: service.recent_context(c, uid, session_id, seconds))
-
-
-@mcp.tool(annotations=RO)
-def list_moments(session_id: str, status: str | None = None) -> list[dict]:
-    """Momentos candidatos detectados (áudio/imagem/palavras) e a decisão do Claude quando houve análise. Escopo live:read."""
-    uid = principal("live:read"); return run(lambda c: service.moments(c, uid, session_id, status))
+def remove_stream(stream_id: str) -> dict:
+    """Remove uma transmissão conectada (para o monitoramento se estiver ativo e libera o slot). Cortes já gerados ficam. Escopo live:control."""
+    uid = principal("live:control"); return run(lambda c: service.remove_stream(c, uid, stream_id))
 
 
 @mcp.tool()
-def create_clip(session_id: str, moment_id: str | None = None, start_t: float | None = None, end_t: float | None = None) -> dict:
+def start_monitoring(stream_id: str | None = None, channel: str | None = None, budget_usd: float | None = None,
+                     max_minutes: float | None = None, lang: str = "auto") -> dict:
+    """Inicia o monitoramento de uma transmissão CONECTADA (stream_id, ou channel já conectado). O backend aplica o limite
+    de transmissões simultâneas do plano, a franquia mensal, a duração máxima e o orçamento de IA por sessão.
+    A gravação e a análise rodam no Live Agent do servidor. Escopo live:control."""
+    uid = principal("live:control")
+    def go(c):
+        need_terms(c, uid); u = user_row(c, uid); sid = stream_id
+        if not sid:
+            if not channel: raise service.LiveError("Informe stream_id ou channel.")
+            r = c.execute("SELECT id FROM live_streams WHERE user_id=? AND channel=?", (uid, service.parse_channel(channel))).fetchone()
+            if not r: raise service.LiveError("Canal não conectado. Use connect_stream (com a declaração de direitos) antes.", 404)
+            sid = r["id"]
+        return service.start_stream(c, u, sid, budget_usd, max_minutes, lang)
+    return run(go)
+
+
+@mcp.tool(annotations=ToolAnnotations(destructive_hint=True))
+def stop_monitoring(stream_id: str | None = None, session_id: str | None = None) -> dict:
+    """Para o monitoramento (pausa a transmissão conectada; o agente encerra a gravação e apaga o buffer bruto). Escopo live:control."""
+    uid = principal("live:control")
+    return run(lambda c: service.stop(c, uid, service.resolve_session(c, uid, session_id, stream_id)))
+
+
+# ---------------------------------------------------------------- cortes (clips:*)
+@mcp.tool()
+def create_clip(session_id: str | None = None, stream_id: str | None = None, moment_id: str | None = None,
+                start_t: float | None = None, end_t: float | None = None) -> dict:
     """Cria um corte pelo motor de render: a partir de um momento (moment_id) ou de um intervalo start_t/end_t (5–60 s,
-    dentro do buffer da sessão). Escopo clips:write."""
+    dentro do buffer da sessão que está gravando). Conta na franquia mensal de cortes. Escopo clips:write."""
     uid = principal("clips:write")
     if not moment_id and (start_t is None or end_t is None): raise ToolError("Informe moment_id ou start_t e end_t.")
-    mid = run(lambda c: service.request_clip(c, uid, session_id, moment_id, start_t, end_t))
-    return {"moment_id": mid, "status": "clip_requested", "next": "Acompanhe com list_moments ou get_render_status quando houver clip_id."}
+    def go(c):
+        sid = service.resolve_session(c, uid, session_id, stream_id)
+        return service.request_clip(c, uid, sid, moment_id, start_t, end_t)
+    mid = run(go)
+    return {"moment_id": mid, "status": "clip_requested", "next": "Acompanhe com list_render_jobs ou get_highlight(moment_id)."}
+
+
+@mcp.tool()
+def approve_clip(clip_id: str) -> dict:
+    """Aprova um corte já renderizado (status ready) depois da revisão do usuário; libera o download na Biblioteca. Escopo clips:write."""
+    uid = principal("clips:write"); return run(lambda c: service.approve_clip(c, uid, clip_id))
+
+
+@mcp.tool(annotations=RO)
+def list_render_jobs(status: str | None = None, limit: int = 30) -> list[dict]:
+    """Fila de renderização da conta (queued, running, done, failed) com progresso, etapa e o corte associado. Escopo clips:read."""
+    uid = principal("clips:read")
+    if status not in (None, "queued", "running", "done", "failed", "canceled"): raise ToolError("status inválido.")
+    return run(lambda c: service.render_jobs(c, uid, status, limit))
 
 
 @mcp.tool(annotations=RO)
 def get_render_status(clip_id: str) -> dict:
     """Estado da renderização de um corte (fila, progresso, pronto) e links de preview/download. Escopo clips:read."""
     uid = principal("clips:read"); return run(lambda c: service.render_status(c, uid, clip_id))
-
-
-@mcp.tool(annotations=RO)
-def list_clips(session_id: str) -> list[dict]:
-    """Cortes gerados a partir de uma sessão de live. Escopo clips:read."""
-    uid = principal("clips:read")
-    def go(c):
-        s = c.execute("SELECT project_id FROM live_sessions WHERE id=? AND user_id=?", (session_id, uid)).fetchone()
-        if not s: raise service.LiveError("Sessão não encontrada.", 404)
-        return [service.render_status(c, uid, r["id"]) for r in c.execute("SELECT id FROM clips WHERE project_id=? AND user_id=? ORDER BY idx",
-                                                                          (s["project_id"], uid))]
-    return run(go)
 
 
 def http_app():

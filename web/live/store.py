@@ -30,6 +30,12 @@ CREATE INDEX IF NOT EXISTS ix_live_moments ON live_moments(session_id, peak);
 CREATE TABLE IF NOT EXISTS live_frames (
   id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES live_sessions(id) ON DELETE CASCADE, user_id TEXT NOT NULL,
   moment_id TEXT, t_stream REAL NOT NULL, path TEXT NOT NULL, sha256 TEXT NOT NULL, sent_at REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS live_streams (
+  id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, platform TEXT NOT NULL DEFAULT 'twitch',
+  channel TEXT NOT NULL, display_name TEXT DEFAULT '', slot INTEGER NOT NULL, rights_basis TEXT NOT NULL,
+  rights_attested_at REAL NOT NULL, current_session_id TEXT DEFAULT '', last_check TEXT DEFAULT '', last_checked_at REAL DEFAULT 0,
+  created_at REAL NOT NULL, updated_at REAL NOT NULL, UNIQUE (user_id, platform, channel), UNIQUE (user_id, slot));
+CREATE INDEX IF NOT EXISTS ix_live_streams_user ON live_streams(user_id, slot);
 CREATE TABLE IF NOT EXISTS api_tokens (
   id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, name TEXT NOT NULL,
   token_hash TEXT UNIQUE NOT NULL, scopes TEXT NOT NULL, created_at REAL NOT NULL, last_used_at REAL DEFAULT 0,
@@ -40,6 +46,7 @@ ACTIVE = ("starting", "running", "reconnecting", "stopping")
 
 
 def session_dir(uid, sid): return db.user_dir(uid) / "live" / sid
+def preview_path(uid, sid): return session_dir(uid, sid) / "preview.jpg"
 
 
 def event(c, s, kind, data, t_stream=None):

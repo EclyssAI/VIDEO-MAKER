@@ -39,7 +39,37 @@ CREATE TABLE IF NOT EXISTS billing_events (
   raw TEXT, received_at REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS entitlements (
   email TEXT PRIMARY KEY, plan TEXT NOT NULL, status TEXT NOT NULL, until REAL NOT NULL, updated_at REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS terms_acceptances (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  terms_version TEXT NOT NULL, privacy_version TEXT NOT NULL, accepted_at REAL NOT NULL, context TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS ix_terms_user ON terms_acceptances(user_id, accepted_at);
+CREATE TABLE IF NOT EXISTS access_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, ip TEXT NOT NULL, event TEXT NOT NULL, at REAL NOT NULL);
+CREATE INDEX IF NOT EXISTS ix_access_at ON access_logs(at);
 """
+ACCESS_LOG_DAYS = 183  # Marco Civil da Internet (Lei 12.965/2014), art. 15: 6 meses
+
+
+def log_access(c, uid, ip, event):
+    """Registro de acesso a aplicação (IP + data/hora). Sem FK: deve sobreviver à exclusão da conta pelo prazo legal."""
+    c.execute("INSERT INTO access_logs(user_id, ip, event, at) VALUES(?,?,?,?)", (uid, ip or "", event, now()))
+    c.execute("DELETE FROM access_logs WHERE at < ?", (now() - ACCESS_LOG_DAYS * 86400,))
+
+# Colunas adicionadas depois da primeira versão: bancos existentes recebem ALTER TABLE (idempotente, sem perder dados).
+MIGRATIONS = {
+    "usage": {"live_s": "REAL NOT NULL DEFAULT 0", "live_clips": "INTEGER NOT NULL DEFAULT 0", "ai_usd": "REAL NOT NULL DEFAULT 0"},
+    "api_tokens": {"expires_at": "REAL NOT NULL DEFAULT 0"},
+    "live_sessions": {"stream_id": "TEXT DEFAULT ''", "preview_t": "REAL DEFAULT 0", "preview_wall": "REAL DEFAULT 0",
+                      "transcribe_mode": "TEXT NOT NULL DEFAULT 'events'"},
+    "live_segments": {"transcribed": "INTEGER NOT NULL DEFAULT 1"},
+}
+
+
+def migrate(c):
+    for table, cols in MIGRATIONS.items():
+        have = {r[1] for r in c.execute(f"PRAGMA table_info({table})")}
+        for col, decl in cols.items():
+            if col not in have: c.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
 
 
 def now(): return time.time()
@@ -56,7 +86,9 @@ def connect():
 
 def init():
     from .live.store import SCHEMA as LIVE_SCHEMA
-    with contextlib.closing(connect()) as c: c.executescript(SCHEMA + LIVE_SCHEMA)
+    with contextlib.closing(connect()) as c:
+        c.executescript(SCHEMA + LIVE_SCHEMA); migrate(c)
+        c.execute("CREATE INDEX IF NOT EXISTS ix_live_sessions_stream ON live_sessions(stream_id, created_at)")
 
 
 @contextlib.contextmanager

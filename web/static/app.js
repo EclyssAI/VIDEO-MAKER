@@ -51,7 +51,7 @@ window.addEventListener("popstate", route);
 /* ---------------- shell ---------------- */
 function shell(active, content) {
   const me = S.me, L = me.limits;
-  const nav = [["/", "home", "Painel"], ["/live", "radio", "Claude Live Monitor"], ["/biblioteca", "lib", "Biblioteca"], ["/conta", "user", "Conta e plano"]];
+  const nav = [["/", "home", "Painel"], ["/live", "radio", "Live Monitor"], ["/biblioteca", "lib", "Biblioteca"], ["/conta", "user", "Conta e plano"]];
   const planMini = L ? `<div class="plan-mini"><div class="row"><strong>${esc(me.plan_label)}</strong><span class="spacer"></span><span class="muted small">${me.usage.projects}/${L.projects_per_month}</span></div>
       <progress max="${L.projects_per_month}" value="${me.usage.projects}" aria-label="Projetos usados no mês"></progress>
       <span class="muted small">projetos neste mês</span></div>`
@@ -76,6 +76,7 @@ async function route() {
   if (!S.me) { try { S.me = await api("/api/me", { quiet: true }); } catch { S.me = null; } }
   if (!S.me) return p === "/criar-conta" ? authView("signup") : authView("login");
   if (p === "/entrar" || p === "/criar-conta") return go("/");
+  if (S.me.terms && S.me.terms.required) return termsGate();
   try {
     if (p === "/") return await dashboard();
     if (p === "/novo") return newProject();
@@ -86,6 +87,24 @@ async function route() {
     if (p.startsWith("/live/")) return await liveSession(p.split("/")[2]);
     render(shell("", `<div class="empty"><h2>Página não encontrada</h2><a class="btn" href="/" data-link>Voltar ao painel</a></div>`));
   } catch (e) { if (S.me) render(shell("", `<div class="empty"><h2>Não foi possível carregar</h2><p>${esc(e.message)}</p><a class="btn" href="/" data-link>Voltar</a></div>`)); }
+}
+
+function termsGate() {
+  const t = S.me.terms;
+  render(`<div class="auth-panel gate"><form class="auth-box stack" id="tg"><div class="brand"><img src="/static/icon.svg" alt="">ClipeiAki</div>
+    <h2>Atualizamos nossos documentos</h2>
+    <p class="muted">Para continuar usando o ClipeiAki, leia e aceite a versão vigente dos <a href="/termos" target="_blank" rel="noopener">Termos de Uso</a>
+      (versão ${esc(t.terms_version)}) e da <a href="/privacidade" target="_blank" rel="noopener">Política de Privacidade</a> (versão ${esc(t.privacy_version)}).</p>
+    <label class="check"><input type="checkbox" id="tga" required> Li e aceito as versões atuais.</label>
+    <p class="error-text" id="tge" role="alert"></p>
+    <div class="row"><button class="btn primary" type="submit">Aceitar e continuar</button><button class="btn ghost" type="button" id="tgo">Sair</button></div>
+    <p class="muted small">Se não concordar, você pode <a href="/contato">pedir o cancelamento e a exclusão dos dados</a>.</p></form></div>`);
+  $("#tg").onsubmit = async (e) => {
+    e.preventDefault(); if (!$("#tga").checked) { $("#tge").textContent = "Marque a caixa para aceitar."; return; }
+    try { S.me.terms = await api("/api/legal/accept", { method: "POST", json: { terms_version: t.terms_version, privacy_version: t.privacy_version } }); route(); }
+    catch (err) { $("#tge").textContent = err.message; }
+  };
+  $("#tgo").onclick = async () => { await api("/api/auth/logout", { method: "POST" }).catch(() => {}); S.me = null; go("/entrar"); };
 }
 
 function authView(mode) {
@@ -100,15 +119,18 @@ function authView(mode) {
       <div class="field"><label for="email">E-mail</label><input class="input" id="email" type="email" autocomplete="email" required></div>
       <div class="field"><label for="pw">Senha</label><input class="input" id="pw" type="password" autocomplete="${mode === "login" ? "current-password" : "new-password"}" minlength="8" required>
         ${mode === "signup" ? '<span class="hint">Mínimo de 8 caracteres.</span>' : ""}</div>
-      ${mode === "signup" ? `<div class="field"><label for="invite">Código de convite <span class="muted">(se você recebeu um)</span></label><input class="input" id="invite" autocomplete="off"></div>` : ""}
+      ${mode === "signup" ? `<div class="field"><label for="invite">Código de convite <span class="muted">(se você recebeu um)</span></label><input class="input" id="invite" autocomplete="off"></div>
+      <label class="check terms"><input type="checkbox" id="acc" required> <span>Li e aceito os <a href="/termos" target="_blank" rel="noopener">Termos de Uso</a> e a
+        <a href="/privacidade" target="_blank" rel="noopener">Política de Privacidade</a>.</span></label>` : ""}
       <p class="error-text" id="aerr" role="alert"></p>
       <button class="btn primary lg block" type="submit">${mode === "login" ? "Entrar" : "Criar conta"}</button>
+      <p class="muted small legal-links"><a href="/termos">Termos</a> · <a href="/privacidade">Privacidade</a> · <a href="/cancelamento">Cancelamento e reembolso</a> · <a href="/contato">Contato</a></p>
     </form></section></div>`);
   $$(".seg button").forEach((b) => b.onclick = () => go(b.dataset.m === "login" ? "/entrar" : "/criar-conta"));
   $("#authf").onsubmit = async (e) => {
     e.preventDefault(); const btn = e.submitter; btn.disabled = true; $("#aerr").textContent = "";
     const body = { email: $("#email").value, password: $("#pw").value };
-    if (mode === "signup") Object.assign(body, { name: $("#name").value, invite: $("#invite").value });
+    if (mode === "signup") Object.assign(body, { name: $("#name").value, invite: $("#invite").value, accept_terms: $("#acc").checked });
     try { S.me = await api(`/api/auth/${mode}`, { method: "POST", json: body }); go("/"); }
     catch (err) { $("#aerr").textContent = err.message; btn.disabled = false; }
   };
@@ -281,8 +303,9 @@ async function library() {
 
 async function account() {
   const b = await api("/api/billing"); const me = b.me; S.me = me;
-  const feat = (L) => [`${L.projects_per_month} projetos por mês`, `${L.minutes_per_month} minutos de vídeo por mês`, `Vídeos de até ${L.max_video_minutes} min`, `Até ${L.clips_per_project} cortes por vídeo`, "Legendas, enquadramento de webcam e 1080×1920",
-    ...(L.premium_assets ? ["Efeitos premium: SFX e zoom no momento forte"] : [])];
+  const feat = (L) => [`Live Monitor: até ${L.live_slots} transmissões simultâneas`, `${L.live_hours_per_month} h de monitoramento e ${L.live_clips_per_month} cortes de live por mês`,
+    `${L.projects_per_month} projetos e ${L.minutes_per_month} min de vídeo enviados por mês`, `Vídeos de até ${L.max_video_minutes} min · até ${L.clips_per_project} cortes por vídeo`,
+    "Legendas, enquadramento de webcam e vertical 1080×1920 (Shorts, Reels, TikTok)", ...(L.premium_assets ? ["Efeitos premium: SFX e zoom no momento forte"] : [])];
   const planCard = (k, L) => {
     const cur = me.plan === k, url = b.checkout[k];
     const cta = cur ? `<span class="chip ok">Seu plano</span>` : url ? `<a class="btn ${k === "studio" ? "primary" : ""} block" href="${esc(url)}" target="_blank" rel="noopener">${me.plan && me.plan !== "beta" ? "Mudar para este plano" : "Assinar"}</a>`
@@ -301,9 +324,20 @@ async function account() {
       <p class="muted">${me.usage.projects} de ${me.limits.projects_per_month} projetos e ${Math.round(me.usage.minutes)} de ${me.limits.minutes_per_month} minutos usados neste mês.</p>` : `<p class="muted">Nenhum plano ativo.</p>`}
       ${me.claude_copy ? "" : `<p class="muted small">Tradução e títulos automáticos estão desativados neste ambiente: os cortes saem com título padrão editável e legenda no idioma original.</p>`}</div></div>
     <section class="panel stack tokens" id="tokens" aria-labelledby="tkh"></section>
+    <section class="panel stack privacy" aria-labelledby="pvh"><h2 id="pvh">Seus dados</h2>
+      <p class="muted">Termos aceitos: versão ${esc(me.terms.accepted ? me.terms.accepted.terms_version : "—")} em ${me.terms.accepted ? new Date(me.terms.accepted.accepted_at * 1000).toLocaleString("pt-BR") : "—"}.
+        <a href="/termos">Termos</a> · <a href="/privacidade">Privacidade</a> · <a href="/cancelamento">Cancelamento e reembolso</a></p>
+      <div class="row"><a class="btn" href="/api/me/export" download>${icon("download")}Baixar meus dados (JSON)</a>
+        <button class="btn danger" type="button" id="delacc">${icon("trash")}Excluir minha conta</button></div>
+      <p class="muted small">A exclusão para as lives em andamento e apaga projetos, cortes, transmissões, tokens e arquivos. Assinaturas ativas devem ser canceladas na Cakto (veja a política de cancelamento).</p></section>
     <h2 class="section-title">Planos</h2><div class="plans">${Object.entries(b.plans).map(([k, L]) => planCard(k, L)).join("")}</div>`));
   $("#pf").onsubmit = async (e) => { e.preventDefault(); try { S.me = await api("/api/me", { method: "PATCH", json: { name: $("#n").value, handle: $("#h").value } }); $("#h").value = S.me.handle; toast("Perfil salvo."); } catch (err) { toast(err.message, true); } };
   renderTokens(me);
+  $("#delacc").onclick = async () => {
+    const pw = prompt("Para excluir a conta e todos os vídeos, digite sua senha. Esta ação não pode ser desfeita."); if (!pw) return;
+    try { await api("/api/me", { method: "DELETE", json: { password: pw } }); S.me = null; toast("Conta excluída."); location.href = "/"; }
+    catch (err) { toast(err.message, true); }
+  };
   $("#logout").onclick = async () => { await api("/api/auth/logout", { method: "POST" }).catch(() => {}); S.me = null; go("/entrar"); };
 }
 
