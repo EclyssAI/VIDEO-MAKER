@@ -244,8 +244,7 @@ def oauth_disconnect(family: str, request: Request):
 def public_plans():
     """Planos para a landing (mesma fonte que o backend usa para aplicar os limites)."""
     keys = ("label", "price_brl", "projects_per_month", "minutes_per_month", "max_upload_mb", "max_video_minutes", "clips_per_project",
-            "premium_assets", "live_slots", "live_hours_per_month", "live_clips_per_month", "live_max_minutes", "live_budget_usd_max",
-            "live_ai_usd_per_month")
+            "premium_assets", "live_slots", "live_hours_per_month", "live_clips_per_month", "live_max_minutes")
     return {"plans": {k: {f: v[f] for f in keys} for k, v in plans.PLANS.items() if k in ("creator", "studio")},
             "checkout_enabled": billing.enabled(), "checkout": billing.checkout_urls(), "terms_version": legal.TERMS_VERSION}
 

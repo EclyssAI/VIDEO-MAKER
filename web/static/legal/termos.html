@@ -42,11 +42,14 @@ transmissões ao vivo em cortes verticais para revisão e download. Ao criar a c
   <li><strong>Live Monitor</strong>: monitoramento de transmissões da <strong>Twitch</strong> conectadas por você, gravadas no servidor em blocos de 10 segundos,
   com detecção local de momentos (picos de áudio, mudanças de imagem e palavras de reação), preview do último frame gravado e criação de cortes.
   A quantidade de transmissões simultâneas, as horas e os cortes por mês dependem do plano (seção 4).</li>
-  <li><strong>Integração MCP</strong>: tokens pessoais para controlar o Live Monitor por um cliente compatível (por exemplo, o Claude), com permissões por escopo.</li>
+  <li><strong>Integração MCP</strong>: conecte o seu Claude (claude.ai, Claude Desktop ou Claude Code) por OAuth ou token pessoal para acompanhar as
+  transmissões, ver as evidências dos momentos e decidir, criar e aprovar cortes por chat, com permissões por escopo.</li>
 </ul>
-<p>Funcionalidades <strong>não disponíveis</strong> ou dependentes de ativação: postagem automática em redes sociais (não oferecida);
-monitoramento de YouTube, Kick ou outras plataformas (em desenvolvimento); análise contextual por IA de terceiros (Claude, da Anthropic),
-que só funciona quando ativada pela Eclyss e é sempre indicada no painel como <em>conectada</em> ou <em>desconectada</em>.
+<p><strong>Análise por IA</strong>: o ClipeiAki não contrata nem usa API de IA para analisar seus vídeos. A análise contextual dos momentos
+é feita, se você quiser, pelo <strong>seu próprio Claude</strong> (Anthropic), conectado ao ClipeiAki por MCP com a sua autorização
+(conector OAuth). O uso desse assistente é regido pelo seu contrato com a Anthropic e conta no seu plano do Claude.</p>
+<p>Funcionalidades <strong>não disponíveis</strong>: postagem automática em redes sociais (não oferecida); monitoramento de YouTube, Kick ou
+outras plataformas (em desenvolvimento).
 <strong>Não oferecemos monitoramento ilimitado nem 24 horas por dia</strong>: cada sessão tem duração máxima e há franquia mensal.</p>
 
 <h2 id="t3">3. Conta</h2>
@@ -58,7 +61,7 @@ que só funciona quando ativada pela Eclyss e é sempre indicada no painel como 
 </ul>
 
 <h2 id="t4">4. Planos, preços e franquias</h2>
-<table class="tbl"><thead><tr><th>Item</th><th>Creator</th><th>Creator Studio</th></tr></thead><tbody><tr><td>Preço (recorrência mensal)</td><td>R$ 49,90/mês</td><td>R$ 69,90/mês</td></tr><tr><td>Transmissões monitoradas ao mesmo tempo</td><td>até 3</td><td>até 10</td></tr><tr><td>Horas de monitoramento por mês</td><td>60 h</td><td>200 h</td></tr><tr><td>Cortes de live por mês</td><td>150</td><td>500</td></tr><tr><td>Teto mensal de gasto com IA (só quando a análise por IA estiver ativada)</td><td>US$ 2,00</td><td>US$ 4,00</td></tr><tr><td>Duração máxima de cada sessão de monitoramento</td><td>2 h</td><td>4 h</td></tr><tr><td>Projetos por envio de arquivo por mês</td><td>30 (até 600 min)</td><td>60 (até 1.500 min)</td></tr><tr><td>Duração e tamanho máximos por vídeo enviado</td><td>90 min · 2 GB</td><td>180 min · 4 GB</td></tr><tr><td>Cortes sugeridos por vídeo enviado</td><td>até 6</td><td>até 10</td></tr><tr><td>Efeitos premium (SFX, zoom no pico)</td><td>—</td><td>incluídos</td></tr></tbody></table>
+<table class="tbl"><thead><tr><th>Item</th><th>Creator</th><th>Creator Studio</th></tr></thead><tbody><tr><td>Preço (recorrência mensal)</td><td>R$ 49,90/mês</td><td>R$ 69,90/mês</td></tr><tr><td>Transmissões monitoradas ao mesmo tempo</td><td>até 3</td><td>até 10</td></tr><tr><td>Horas de monitoramento por mês</td><td>60 h</td><td>200 h</td></tr><tr><td>Cortes de live por mês</td><td>150</td><td>500</td></tr><tr><td>Análise dos momentos pelo Claude do próprio usuário (MCP)</td><td>incluída (usa o plano do Claude do usuário)</td><td>incluída (usa o plano do Claude do usuário)</td></tr><tr><td>Duração máxima de cada sessão de monitoramento</td><td>2 h</td><td>4 h</td></tr><tr><td>Projetos por envio de arquivo por mês</td><td>30 (até 600 min)</td><td>60 (até 1.500 min)</td></tr><tr><td>Duração e tamanho máximos por vídeo enviado</td><td>90 min · 2 GB</td><td>180 min · 4 GB</td></tr><tr><td>Cortes sugeridos por vídeo enviado</td><td>até 6</td><td>até 10</td></tr><tr><td>Efeitos premium (SFX, zoom no pico)</td><td>—</td><td>incluídos</td></tr></tbody></table>
 <p>Os limites acima são aplicados automaticamente pelo sistema e exibidos no painel com o consumo do mês. Franquias não usadas
 <strong>não acumulam</strong> para o mês seguinte. O valor cobrado é o exibido no checkout no momento da compra.</p>
 <p class="destaque"><strong>Alteração de preço ou de franquia</strong>: será comunicada por e-mail e no painel com pelo menos 30 dias de antecedência e
@@ -88,7 +91,8 @@ estão na <a href="/conteudo">Política de Conteúdo e Direitos de Terceiros</a>
 
 <h2 id="t8">8. Live Monitor, IA e integrações</h2>
 <p>Ao conectar uma transmissão você declara ser o titular do canal ou ter autorização do titular. O uso deve respeitar as regras da plataforma
-de origem. Detalhes, limites técnicos e limitações da identificação automática estão nas
+de origem. Ao conectar o seu Claude via MCP, você autoriza que ele receba, a pedido dele, os frames, a transcrição e os dados dos momentos das
+suas transmissões, e que crie e aprove cortes conforme os escopos autorizados; você pode desconectar a qualquer momento. Detalhes, limites técnicos e limitações da identificação automática estão nas
 <a href="/regras-live-ia">Regras do Live Monitor, da IA e das Integrações</a>.</p>
 <p class="destaque"><strong>A identificação automática de momentos pode errar</strong>: pode deixar de detectar um momento relevante, sugerir trechos sem
 interesse ou cortar no ponto errado. Por isso todo corte passa pela sua revisão antes do download. O ClipeiAki não garante visualizações,
@@ -107,7 +111,7 @@ ou ordem judicial impedir. Em caso de encerramento por violação, valores de pe
 
 <h2 id="t10">10. Disponibilidade e serviços de terceiros</h2>
 <p>Trabalhamos para manter o serviço disponível, mas pode haver interrupções para manutenção, por falhas de infraestrutura ou por mudanças em
-serviços de terceiros (Twitch, Cakto, provedores de hospedagem e de IA). Se uma plataforma de origem mudar ou bloquear o acesso às transmissões,
+serviços de terceiros (Twitch, Cakto, provedores de hospedagem e o Claude da sua conta). Se uma plataforma de origem mudar ou bloquear o acesso às transmissões,
 o Live Monitor pode ficar indisponível para aquela plataforma; nesse caso avisaremos no painel e, se a indisponibilidade comprometer o que foi
 contratado, você terá direito às medidas da seção 6.</p>
 

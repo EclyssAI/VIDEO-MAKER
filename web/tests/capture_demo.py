@@ -61,11 +61,11 @@ def main():
         mon = c.get("/api/live/monitor").json()
         print("monitor:", [(s["channel"], s["state"], s["session"] and s["session"]["candidates"]) for s in mon["streams"]])
         tok = c.post("/api/tokens", json={"name": "Claude Code (demo)", "scopes": ["live:read"], "days": 30}, headers=H).json()["token"]
-        mcp_txt = asyncio.run(mcp_list(base, tok)); (out / "mcp_list_connected_streamers.json").write_text(mcp_txt)
+        mcp_txt = asyncio.run(mcp_list(base, tok)); (data / "mcp_list_connected_streamers.json").write_text(mcp_txt)  # fora da pasta pública
         clip = next(x for x in pr["items"] if x["status"] == "ready")
         cookie = c.cookies.get("vm_session")
         r = subprocess.run(["node", str(ROOT / "web/tests/capture_shots.js")], cwd=ROOT, text=True, capture_output=True,
-                           env={**os.environ, "BASE": base, "COOKIE": cookie, "SHOT": a.shot, "PID": pid, "OUT": str(out), "MCP": str(out / "mcp_list_connected_streamers.json")})
+                           env={**os.environ, "BASE": base, "COOKIE": cookie, "SHOT": a.shot, "PID": pid, "OUT": str(out), "MCP": str(data / "mcp_list_connected_streamers.json")})
         print(r.stdout[-2000:], r.stderr[-2000:])
         # quadros antes/depois e vídeo curto de exemplo (saída real do motor)
         v = c.get(f"/api/clips/{clip['id']}/video"); (data / "clip.mp4").write_bytes(v.content)
@@ -76,7 +76,7 @@ def main():
                         "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart", str(out / "exemplo.mp4")], check=True)
         from PIL import Image
         for n in ("antes", "depois"): Image.open(data / f"{n}.png").save(out / f"{n}.webp", "WEBP", quality=82)
-        json.dump({"clip": clip, "monitor": mon, "data_dir": str(data)}, open(out.parent / "demo_capture_meta.json", "w"), ensure_ascii=False, default=str, indent=1)
+        json.dump({"clip": clip, "monitor": mon}, open(data / "demo_capture_meta.json", "w"), ensure_ascii=False, default=str, indent=1)
         print("ok", out)
     finally:
         for pr_ in procs: pr_.send_signal(signal.SIGTERM)

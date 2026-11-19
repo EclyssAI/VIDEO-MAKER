@@ -8,9 +8,11 @@ Versionamento semântico (MAJOR.MINOR.PATCH). Versão atual em `VERSION`.
   candidatos, cortes e ações iniciar/pausar/remover/inspecionar; franquia mensal de horas e cortes contada bloco a bloco.
 - Live Agent: Whisper ~6x mais leve (beam 1, sem condicionamento, bloqueio de n-gramas), transcrição por evento, imagem por
   quadros-chave acima de 3 sessões, banda medida por bloco; correção: orçamento de IA US$ 0 não encerra mais a sessão.
-- MCP: 15 ferramentas (list_connected_streamers, connect_stream, start/stop_monitoring, get_live_status, get_live_preview com
-  imagem, list_detected_moments, get_highlight com evidências, create_clip, approve_clip, list_render_jobs…), limite de
-  requisições por token, tokens com validade.
+- MCP com o **Claude do próprio cliente** (sem API do Claude no servidor; `LIVE_CLAUDE_ENABLED=0` por padrão): servidor de
+  autorização OAuth 2.1 (registro dinâmico, PKCE, consentimento em /conectar-claude, refresh com rotação) para o conector do
+  claude.ai/Claude Desktop, tokens pessoais para o Claude Code; 16 ferramentas (as 11 pedidas + review_moment, get_recent_context,
+  check_channel, get_render_status, remove_stream), evidências como imagem, prompt revisar_momentos, limite por token.
+- Correções: corrida na migração do banco com processos subindo juntos; contraste do botão primário (WCAG AA).
 - Jurídico: 7 páginas públicas, aceite versionado (cadastro e reaceite com HTTP 428), exportação e exclusão de dados,
   registros de acesso por 6 meses, payload da Cakto minimizado. Revisão de riscos em `docs/RISCOS_JURIDICOS.md`.
 - Landing comercial servida em `/` para visitantes (gerada de `web/site_src` + `config/plans.yaml` por `python -m web.site_build`).

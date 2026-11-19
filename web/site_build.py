@@ -40,7 +40,7 @@ def table(P):
         ("Horas de monitoramento por mês", f"{c['live_hours_per_month']} h", f"{s['live_hours_per_month']} h"),
         ("Cortes de live por mês", str(c["live_clips_per_month"]), str(s["live_clips_per_month"])),
         ("Duração máxima por sessão", f"{c['live_max_minutes'] / 60:g} h", f"{s['live_max_minutes'] / 60:g} h"),
-        ("Teto mensal de gasto com IA (quando ativada)", usd(c["live_ai_usd_per_month"]), usd(s["live_ai_usd_per_month"])),
+        ("Análise dos momentos pelo seu Claude (MCP, conector OAuth)", yes, yes),
         ("Vídeos enviados por mês", f"{c['projects_per_month']} · {n(c['minutes_per_month'])} min", f"{s['projects_per_month']} · {n(s['minutes_per_month'])} min"),
         ("Duração e tamanho por vídeo", f"{c['max_video_minutes']} min · {c['max_upload_mb'] // 1024} GB", f"{s['max_video_minutes']} min · {s['max_upload_mb'] // 1024} GB"),
         ("Cortes sugeridos por vídeo enviado", str(c["clips_per_project"]), str(s["clips_per_project"])),

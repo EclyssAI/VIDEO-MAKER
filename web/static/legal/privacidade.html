@@ -41,9 +41,9 @@ exerce seus direitos, conforme a Lei Geral de Proteção de Dados (Lei nº 13.70
     <tr><td>Registros de acesso</td><td>endereço IP, data e hora de login e cadastro</td><td>cumprir o Marco Civil da Internet (Lei nº 12.965/2014, art. 15) e prevenir fraude</td><td>obrigação legal (art. 7º, II)</td></tr>
     <tr><td>Conteúdo enviado</td><td>vídeos, áudio, imagens e vozes de quem aparece neles, transcrição da fala</td><td>gerar cortes, legendas e previews</td><td>execução de contrato (art. 7º, V)</td></tr>
     <tr><td>Live Monitor</td><td>canal conectado, declaração de direitos (titular/autorizado) com data, blocos de vídeo da transmissão, frames, transcrição, sinais medidos (volume, mudança de imagem), momentos detectados</td><td>monitorar a transmissão que você conectou e gerar cortes</td><td>execução de contrato (art. 7º, V)</td></tr>
-    <tr><td>Evidências da IA</td><td>frames enviados à IA (com SHA-256), transcrição da janela, decisão e custo da análise</td><td>mostrar a você exatamente o que foi analisado</td><td>execução de contrato (art. 7º, V)</td></tr>
+    <tr><td>Evidências da revisão</td><td>frames mostrados ao seu Claude pelo MCP (com SHA-256), transcrição da janela e a decisão registrada</td><td>mostrar a você exatamente o que foi analisado e por quem</td><td>execução de contrato (art. 7º, V)</td></tr>
     <tr><td>Uso e limites</td><td>contagem mensal de projetos, minutos, horas de live e cortes</td><td>aplicar a franquia do plano</td><td>execução de contrato (art. 7º, V)</td></tr>
-    <tr><td>Tokens de API (MCP)</td><td>nome, escopos, validade, último uso (o token em si é guardado só como hash)</td><td>autenticar integrações que você criou</td><td>execução de contrato (art. 7º, V)</td></tr>
+    <tr><td>Integração MCP (seu Claude)</td><td>tokens pessoais e conexões OAuth: nome do aplicativo cliente, escopos, validade, último uso (tokens e códigos guardados só como hash)</td><td>autenticar o Claude que você conectou</td><td>execução de contrato (art. 7º, V)</td></tr>
     <tr><td>Pagamento</td><td>e-mail do comprador, oferta, situação, valores e datas do pagamento (sem CPF, telefone, endereço ou cartão)</td><td>liberar e manter o acesso pago</td><td>execução de contrato (art. 7º, V)</td></tr>
   </tbody>
 </table>
@@ -63,18 +63,19 @@ reconhecimento facial para identificar pessoas: a detecção de rosto serve apen
 <ul>
   <li><strong>Hospedagem e armazenamento</strong>: <mark class="pend">PENDENTE_DADO_EMPRESARIAL</mark> (provedor de nuvem ainda não definido; será identificado aqui antes do lançamento).</li>
   <li><strong>Cakto</strong> (pagamentos) — trata os dados de pagamento informados no checkout.</li>
-  <li><strong>Anthropic, PBC</strong> (EUA) — <em>somente quando a análise por IA estiver ativada</em>: recebe os frames selecionados e a transcrição da
-  janela do momento candidato. Pelos termos comerciais da Anthropic, o conteúdo enviado pela API não é usado para treinar os modelos dela.
-  O painel informa se a análise está conectada.</li>
+  <li><strong>Seu Claude (Anthropic)</strong> — não é nosso operador: o ClipeiAki não envia nada à Anthropic por conta própria. Quando
+  <em>você</em> conecta o seu Claude pelo MCP, ele pede ao ClipeiAki os dados que precisa (lista de transmissões, momentos, frames e transcrição
+  dos trechos) e os recebe na sua conta do Claude, onde são tratados conforme o seu contrato com a Anthropic. Você vê as conexões ativas e pode
+  desconectar em <em>Conta e plano</em>.</li>
   <li><strong>Twitch</strong> — não é nossa operadora: é a plataforma de origem das transmissões que você conecta. Ao abrir a página de inspeção,
   o player oficial da Twitch é carregado e segue as regras de privacidade da Twitch.</li>
   <li>Autoridades, quando houver obrigação legal ou ordem judicial.</li>
 </ul>
 
 <h2 id="p5">5. Transferência internacional</h2>
-<p>Quando a análise por IA estiver ativada, frames e transcrições são enviados à Anthropic, nos Estados Unidos (LGPD, art. 33). A ativação
-depende da formalização do mecanismo de transferência exigido pela ANPD (Res. CD/ANPD nº 19/2024 — cláusulas-padrão contratuais).
-O local do provedor de hospedagem será informado na seção 4.</p>
+<p>O ClipeiAki não transfere dados para fora do Brasil por iniciativa própria além do que depender do provedor de hospedagem (local informado
+na seção 4). Quando você conecta o seu Claude, os dados que ele solicita vão para a sua conta na Anthropic (EUA) por sua iniciativa
+(LGPD, art. 33); o enquadramento dessa hipótese está em validação jurídica.</p>
 
 <h2 id="p6">6. Por quanto tempo guardamos</h2>
 <table class="tbl">
@@ -82,7 +83,8 @@ O local do provedor de hospedagem será informado na seção 4.</p>
   <tbody>
     <tr><td>Blocos brutos da transmissão</td><td>apagados automaticamente após cerca de 10 minutos (ou enquanto um momento pendente precisar deles) e apagados por completo quando a sessão termina</td></tr>
     <tr><td>Preview da transmissão (último frame)</td><td>substituído a cada bloco e apagado quando a sessão termina</td></tr>
-    <tr><td>Frames enviados à IA, transcrições e momentos</td><td>até você excluir a conta</td></tr>
+    <tr><td>Trecho de um momento candidato aguardando revisão</td><td>até 15 minutos no buffer (depois só ficam os dados do momento)</td></tr>
+    <tr><td>Frames mostrados ao seu Claude, transcrições e momentos</td><td>até você excluir a conta</td></tr>
     <tr><td>Vídeos enviados e cortes</td><td>até você excluir o projeto ou a conta</td></tr>
     <tr><td>Conta, aceite, uso, tokens</td><td>até a exclusão da conta</td></tr>
     <tr><td>Registros de acesso (IP, data e hora)</td><td>6 meses (Marco Civil, art. 15), mesmo após a exclusão da conta; depois são apagados automaticamente</td></tr>
@@ -94,9 +96,9 @@ está em avaliação e, se adotada, será anunciada antes de entrar em vigor.</p
 
 <h2 id="p7">7. Segurança</h2>
 <p>Medidas que o sistema aplica hoje: senhas com hash scrypt; cookie de sessão HttpOnly e SameSite, enviado só por HTTPS em produção; tokens de sessão
-e de API guardados apenas como hash; tokens de API com escopos, validade e limite de requisições; isolamento por conta em todas as consultas e
+e de API guardados apenas como hash; tokens de API e conexões OAuth (PKCE, código de uso único, renovação com rotação) com escopos, validade e limite de requisições; isolamento por conta em todas as consultas e
 pastas de arquivos; proteção contra CSRF e política de segurança de conteúdo (CSP); limites de tentativas de login e de cadastro; chaves de
-serviços (como a da IA) apenas no servidor, nunca no navegador.</p>
+serviços apenas no servidor, nunca no navegador.</p>
 <p class="destaque">Não há, hoje, criptografia em repouso própria do aplicativo nem rotina de backup: isso depende do provedor de hospedagem (<mark class="pend">PENDENTE_DADO_EMPRESARIAL</mark>).
 Em caso de incidente de segurança que possa causar risco ou dano relevante, comunicaremos a ANPD e os titulares afetados em até 3 dias úteis
 (Res. CD/ANPD nº 15/2024), e manteremos registro do incidente.</p>

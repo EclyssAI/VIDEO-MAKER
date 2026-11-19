@@ -1,0 +1,122 @@
+{
+ "views": {
+  "mobile-375": {
+   "overflowX": 0,
+   "height": 11376,
+   "small": [],
+   "taps": [],
+   "hidden": 0,
+   "axe": [],
+   "errors": []
+  },
+  "tablet-768": {
+   "overflowX": 0,
+   "height": 9070,
+   "small": [],
+   "taps": [],
+   "hidden": 0,
+   "axe": [],
+   "errors": []
+  },
+  "desktop-1280": {
+   "overflowX": 0,
+   "height": 7592,
+   "small": [],
+   "taps": [],
+   "hidden": 0,
+   "axe": [],
+   "errors": []
+  },
+  "wide-1440": {
+   "overflowX": 0,
+   "height": 7616,
+   "small": [],
+   "taps": [],
+   "hidden": 0,
+   "axe": [],
+   "errors": []
+  }
+ },
+ "legal": {
+  "termos": {
+   "status": 200,
+   "version": "2026-11-19",
+   "pendencias": 6
+  },
+  "privacidade": {
+   "status": 200,
+   "version": "2026-11-19",
+   "pendencias": 9
+  },
+  "cancelamento": {
+   "status": 200,
+   "version": "2026-11-19",
+   "pendencias": 1
+  },
+  "conteudo": {
+   "status": 200,
+   "version": "2026-11-19",
+   "pendencias": 1
+  },
+  "cookies": {
+   "status": 200,
+   "version": "2026-11-19",
+   "pendencias": 1
+  },
+  "regras-live-ia": {
+   "status": 200,
+   "version": "2026-11-19",
+   "pendencias": 1
+  },
+  "contato": {
+   "status": 200,
+   "version": "2026-11-19",
+   "pendencias": 6
+  }
+ },
+ "errors": [],
+ "ok": true,
+ "reduced_motion_hidden": 0,
+ "plans": {
+  "cards": [
+   {
+    "name": "Creator",
+    "price": "R$ 49,90 /mês",
+    "first": "3 lives ao mesmo tempo"
+   },
+   {
+    "name": "Creator Studio",
+    "price": "R$ 69,90 /mês",
+    "first": "10 lives ao mesmo tempo"
+   }
+  ],
+  "api": {
+   "creator": [
+    "Creator",
+    49.9,
+    3
+   ],
+   "studio": [
+    "Creator Studio",
+    69.9,
+    10
+   ]
+  },
+  "checkout_enabled": false,
+  "cta": [
+   [
+    "creator",
+    "/criar-conta",
+    "Criar conta · assinaturas em breve"
+   ],
+   [
+    "studio",
+    "/criar-conta",
+    "Criar conta · assinaturas em breve"
+   ]
+  ]
+ },
+ "words": 533,
+ "legal_axe": [],
+ "legal_mobile_overflow": 0
+}

@@ -1,0 +1,127 @@
+{
+  "plan": "Creator",
+  "slots": 3,
+  "active": 3,
+  "usage": {
+    "live_hours": 0.05,
+    "live_clips": 0,
+    "ai_usd": 0.0
+  },
+  "quota": {
+    "live_hours_per_month": 60,
+    "live_clips_per_month": 150
+  },
+  "claude": {
+    "state": "disabled",
+    "detail": "Sem análise automática no servidor: a revisão dos momentos é feita pelo seu Claude via MCP (ou por você)."
+  },
+  "streams": [
+    {
+      "id": "str_3CRCCn8UgnpqWU_X",
+      "platform": "twitch",
+      "channel": "demo_canal_a",
+      "slot": 1,
+      "url": "https://www.twitch.tv/demo_canal_a",
+      "rights_basis": "owner",
+      "rights_attested_at": 1795116454.2670171,
+      "state": "live",
+      "session": {
+        "id": "live_S-dFbg5IJqA_YrYn",
+        "status": "running",
+        "stop_reason": null,
+        "error": null,
+        "recorded_s": 63.2,
+        "started_at": 1795116455.8827324,
+        "stopped_at": null,
+        "monitoring_s": 69.4,
+        "candidates": 2,
+        "clips": 0,
+        "calls": 0,
+        "spent_usd": 0.0,
+        "agent_alive": true,
+        "preview": {
+          "url": "/api/live/streams/str_3CRCCn8UgnpqWU_X/preview?v=1795116517",
+          "t_stream": 62.53,
+          "wall_at": 1795116517.626147
+        },
+        "last_event": {
+          "kind": "analysis_skipped",
+          "t_stream": 41.83,
+          "wall_at": 1795116512.9560404
+        }
+      }
+    },
+    {
+      "id": "str_Le1WsZarqdimFdKc",
+      "platform": "twitch",
+      "channel": "demo_canal_b",
+      "slot": 2,
+      "url": "https://www.twitch.tv/demo_canal_b",
+      "rights_basis": "owner",
+      "rights_attested_at": 1795116454.2750297,
+      "state": "live",
+      "session": {
+        "id": "live_FlV-O9Kg6PFWtemI",
+        "status": "running",
+        "stop_reason": null,
+        "error": null,
+        "recorded_s": 62.4,
+        "started_at": 1795116457.8845246,
+        "stopped_at": null,
+        "monitoring_s": 67.4,
+        "candidates": 2,
+        "clips": 0,
+        "calls": 0,
+        "spent_usd": 0.0,
+        "agent_alive": true,
+        "preview": {
+          "url": "/api/live/streams/str_Le1WsZarqdimFdKc/preview?v=1795116519",
+          "t_stream": 61.93,
+          "wall_at": 1795116519.031226
+        },
+        "last_event": {
+          "kind": "analysis_skipped",
+          "t_stream": 36.43,
+          "wall_at": 1795116511.943406
+        }
+      }
+    },
+    {
+      "id": "str_l30Xc9-7WCB5YJyU",
+      "platform": "twitch",
+      "channel": "demo_canal_c",
+      "slot": 3,
+      "url": "https://www.twitch.tv/demo_canal_c",
+      "rights_basis": "owner",
+      "rights_attested_at": 1795116454.2833416,
+      "state": "live",
+      "session": {
+        "id": "live_KdWsQUB5GyPYQ6oK",
+        "status": "running",
+        "stop_reason": null,
+        "error": null,
+        "recorded_s": 61.5,
+        "started_at": 1795116459.8868735,
+        "stopped_at": null,
+        "monitoring_s": 65.4,
+        "candidates": 0,
+        "clips": 0,
+        "calls": 0,
+        "spent_usd": 0.0,
+        "agent_alive": true,
+        "preview": {
+          "url": "/api/live/streams/str_l30Xc9-7WCB5YJyU/preview?v=1795116519",
+          "t_stream": 60.73,
+          "wall_at": 1795116519.826036
+        },
+        "last_event": {
+          "kind": "layout",
+          "t_stream": 0.0,
+          "wall_at": 1795116484.6404498
+        }
+      }
+    }
+  ],
+  "test_source": true,
+  "mcp_last_use": 1795116525.3050776
+}

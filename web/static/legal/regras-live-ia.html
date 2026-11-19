@@ -33,12 +33,13 @@
   <li>Um processo no servidor da Eclyss (não o seu navegador) recebe a transmissão e grava blocos de 10 segundos.</li>
   <li>Detectores locais medem cada bloco: volume do áudio, mudanças bruscas de imagem e palavras de reação na transcrição.</li>
   <li>Trechos acima do normal viram <strong>momentos candidatos</strong>, com horário da transmissão.</li>
-  <li>Se a análise por IA estiver ativada, até 3 frames do momento e a transcrição da janela são enviados ao Claude (Anthropic), que devolve
-  uma decisão (cortar ou ignorar), confiança, início e fim propostos e uma justificativa. <strong>A IA não assiste à transmissão
-  continuamente</strong>: vê apenas o que foi enviado, e cada frame enviado aparece no painel com horário e SHA-256.</li>
+  <li>Se você conectou o seu Claude pelo MCP, ele pode pedir as evidências de um momento (até 3 frames e a transcrição da janela) e registrar
+  uma decisão (cortar ou ignorar), com início, fim, título e justificativa. <strong>O Claude não assiste à transmissão continuamente</strong>:
+  vê apenas o que pede, e cada frame mostrado a ele aparece no painel com horário e SHA-256. Sem o Claude conectado, você decide pelo painel.</li>
   <li>O motor de edição renderiza o corte; você revisa o preview e aprova antes de baixar.</li>
 </ol>
-<p>O monitoramento continua com a aba fechada. Cada sessão tem duração máxima e orçamento de IA; ao atingir um limite, a sessão para sozinha e o motivo aparece no painel.</p>
+<p>O monitoramento continua com a aba fechada. Cada sessão tem duração máxima; ao atingir um limite, a sessão para sozinha e o motivo aparece no
+painel. O trecho de um momento candidato fica disponível para revisão por cerca de 15 minutos.</p>
 
 <h2 id="r3">3. Limites do plano</h2>
 <p>Transmissões simultâneas (Creator: 3; Creator Studio: 10), horas de monitoramento e cortes por mês são aplicados pelo servidor. A capacidade
@@ -54,18 +55,21 @@ total do servidor também é limitada: se estiver cheia, o início de novas sess
   <li>O preview é o último frame <em>gravado</em> pelo servidor, com alguns segundos de atraso em relação ao player ao vivo.</li>
 </ul>
 
-<h2 id="r5">5. Integração MCP (controle por chat)</h2>
+<h2 id="r5">5. Integração MCP (seu Claude)</h2>
 <ul>
-  <li>Você cria tokens pessoais em <em>Conta e plano</em>, escolhendo escopos (leitura, controle, cortes) e validade (até 1 ano).</li>
+  <li><strong>claude.ai / Claude Desktop</strong>: adicione um conector personalizado com a URL do MCP do ClipeiAki; você será levado ao ClipeiAki
+  para entrar e autorizar. A tela mostra o aplicativo e o domínio de retorno: só autorize se foi você que iniciou a conexão.</li>
+  <li><strong>Claude Code</strong>: além do OAuth, você pode criar tokens pessoais em <em>Conta e plano</em>, escolhendo escopos e validade (até 1 ano).</li>
   <li>O token é mostrado uma única vez; guardamos só o hash. Revogue imediatamente se ele vazar.</li>
   <li>Há limite de requisições por token (padrão: 120 leituras e 20 ações por minuto).</li>
   <li>Comandos enviados pelo cliente MCP (por exemplo, o Claude) agem em nome da sua conta e seguem as mesmas regras e limites do painel.
   Conectar um canal por MCP também exige a declaração de direitos.</li>
 </ul>
 
-<h2 id="r6">6. Uso de IA de terceiros</h2>
-<p>Quando ativada, a análise usa a API da Anthropic. Os frames e trechos enviados são tratados conforme a <a href="/privacidade">Política de
-Privacidade</a> (inclusive a transferência internacional). O resultado da IA é uma sugestão: a decisão de publicar é sempre sua.</p>
+<h2 id="r6">6. IA</h2>
+<p>O ClipeiAki não usa API de IA paga: a análise contextual é feita pelo seu Claude, quando você o conecta, e conta no seu plano do Claude. As
+decisões dele são sugestões registradas no painel; o corte só é liberado para download depois da sua aprovação. Veja a
+<a href="/privacidade">Política de Privacidade</a>.</p>
 
 </main>
 </div>

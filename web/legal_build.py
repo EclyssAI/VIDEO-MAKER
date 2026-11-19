@@ -36,7 +36,7 @@ def plans_table():
             ("Transmissões monitoradas ao mesmo tempo", f"até {c['live_slots']}", f"até {t['live_slots']}"),
             ("Horas de monitoramento por mês", f"{c['live_hours_per_month']} h", f"{t['live_hours_per_month']} h"),
             ("Cortes de live por mês", str(c["live_clips_per_month"]), str(t["live_clips_per_month"])),
-            ("Teto mensal de gasto com IA (só quando a análise por IA estiver ativada)", f"US$ {c['live_ai_usd_per_month']:.2f}".replace(".", ","), f"US$ {t['live_ai_usd_per_month']:.2f}".replace(".", ",")),
+            ("Análise dos momentos pelo Claude do próprio usuário (MCP)", "incluída (usa o plano do Claude do usuário)", "incluída (usa o plano do Claude do usuário)"),
             ("Duração máxima de cada sessão de monitoramento", f"{c['live_max_minutes'] / 60:g} h", f"{t['live_max_minutes'] / 60:g} h"),
             ("Projetos por envio de arquivo por mês", f"{c['projects_per_month']} (até {c['minutes_per_month']} min)", f"{t['projects_per_month']} (até {t['minutes_per_month']:,} min)".replace(",", ".")),
             ("Duração e tamanho máximos por vídeo enviado", f"{c['max_video_minutes']} min · {c['max_upload_mb'] // 1024} GB", f"{t['max_video_minutes']} min · {t['max_upload_mb'] // 1024} GB"),
@@ -67,11 +67,14 @@ transmissões ao vivo em cortes verticais para revisão e download. Ao criar a c
   <li><strong>Live Monitor</strong>: monitoramento de transmissões da <strong>Twitch</strong> conectadas por você, gravadas no servidor em blocos de 10 segundos,
   com detecção local de momentos (picos de áudio, mudanças de imagem e palavras de reação), preview do último frame gravado e criação de cortes.
   A quantidade de transmissões simultâneas, as horas e os cortes por mês dependem do plano (seção 4).</li>
-  <li><strong>Integração MCP</strong>: tokens pessoais para controlar o Live Monitor por um cliente compatível (por exemplo, o Claude), com permissões por escopo.</li>
+  <li><strong>Integração MCP</strong>: conecte o seu Claude (claude.ai, Claude Desktop ou Claude Code) por OAuth ou token pessoal para acompanhar as
+  transmissões, ver as evidências dos momentos e decidir, criar e aprovar cortes por chat, com permissões por escopo.</li>
 </ul>
-<p>Funcionalidades <strong>não disponíveis</strong> ou dependentes de ativação: postagem automática em redes sociais (não oferecida);
-monitoramento de YouTube, Kick ou outras plataformas (em desenvolvimento); análise contextual por IA de terceiros (Claude, da Anthropic),
-que só funciona quando ativada pela Eclyss e é sempre indicada no painel como <em>conectada</em> ou <em>desconectada</em>.
+<p><strong>Análise por IA</strong>: o ClipeiAki não contrata nem usa API de IA para analisar seus vídeos. A análise contextual dos momentos
+é feita, se você quiser, pelo <strong>seu próprio Claude</strong> (Anthropic), conectado ao ClipeiAki por MCP com a sua autorização
+(conector OAuth). O uso desse assistente é regido pelo seu contrato com a Anthropic e conta no seu plano do Claude.</p>
+<p>Funcionalidades <strong>não disponíveis</strong>: postagem automática em redes sociais (não oferecida); monitoramento de YouTube, Kick ou
+outras plataformas (em desenvolvimento).
 <strong>Não oferecemos monitoramento ilimitado nem 24 horas por dia</strong>: cada sessão tem duração máxima e há franquia mensal.</p>
 
 <h2 id="t3">3. Conta</h2>
@@ -113,7 +116,8 @@ estão na <a href="/conteudo">Política de Conteúdo e Direitos de Terceiros</a>
 
 <h2 id="t8">8. Live Monitor, IA e integrações</h2>
 <p>Ao conectar uma transmissão você declara ser o titular do canal ou ter autorização do titular. O uso deve respeitar as regras da plataforma
-de origem. Detalhes, limites técnicos e limitações da identificação automática estão nas
+de origem. Ao conectar o seu Claude via MCP, você autoriza que ele receba, a pedido dele, os frames, a transcrição e os dados dos momentos das
+suas transmissões, e que crie e aprove cortes conforme os escopos autorizados; você pode desconectar a qualquer momento. Detalhes, limites técnicos e limitações da identificação automática estão nas
 <a href="/regras-live-ia">Regras do Live Monitor, da IA e das Integrações</a>.</p>
 <p class="destaque"><strong>A identificação automática de momentos pode errar</strong>: pode deixar de detectar um momento relevante, sugerir trechos sem
 interesse ou cortar no ponto errado. Por isso todo corte passa pela sua revisão antes do download. O ClipeiAki não garante visualizações,
@@ -132,7 +136,7 @@ ou ordem judicial impedir. Em caso de encerramento por violação, valores de pe
 
 <h2 id="t10">10. Disponibilidade e serviços de terceiros</h2>
 <p>Trabalhamos para manter o serviço disponível, mas pode haver interrupções para manutenção, por falhas de infraestrutura ou por mudanças em
-serviços de terceiros (Twitch, Cakto, provedores de hospedagem e de IA). Se uma plataforma de origem mudar ou bloquear o acesso às transmissões,
+serviços de terceiros (Twitch, Cakto, provedores de hospedagem e o Claude da sua conta). Se uma plataforma de origem mudar ou bloquear o acesso às transmissões,
 o Live Monitor pode ficar indisponível para aquela plataforma; nesse caso avisaremos no painel e, se a indisponibilidade comprometer o que foi
 contratado, você terá direito às medidas da seção 6.</p>
 
@@ -177,9 +181,9 @@ exerce seus direitos, conforme a Lei Geral de Proteção de Dados (Lei nº 13.70
     <tr><td>Registros de acesso</td><td>endereço IP, data e hora de login e cadastro</td><td>cumprir o Marco Civil da Internet (Lei nº 12.965/2014, art. 15) e prevenir fraude</td><td>obrigação legal (art. 7º, II)</td></tr>
     <tr><td>Conteúdo enviado</td><td>vídeos, áudio, imagens e vozes de quem aparece neles, transcrição da fala</td><td>gerar cortes, legendas e previews</td><td>execução de contrato (art. 7º, V)</td></tr>
     <tr><td>Live Monitor</td><td>canal conectado, declaração de direitos (titular/autorizado) com data, blocos de vídeo da transmissão, frames, transcrição, sinais medidos (volume, mudança de imagem), momentos detectados</td><td>monitorar a transmissão que você conectou e gerar cortes</td><td>execução de contrato (art. 7º, V)</td></tr>
-    <tr><td>Evidências da IA</td><td>frames enviados à IA (com SHA-256), transcrição da janela, decisão e custo da análise</td><td>mostrar a você exatamente o que foi analisado</td><td>execução de contrato (art. 7º, V)</td></tr>
+    <tr><td>Evidências da revisão</td><td>frames mostrados ao seu Claude pelo MCP (com SHA-256), transcrição da janela e a decisão registrada</td><td>mostrar a você exatamente o que foi analisado e por quem</td><td>execução de contrato (art. 7º, V)</td></tr>
     <tr><td>Uso e limites</td><td>contagem mensal de projetos, minutos, horas de live e cortes</td><td>aplicar a franquia do plano</td><td>execução de contrato (art. 7º, V)</td></tr>
-    <tr><td>Tokens de API (MCP)</td><td>nome, escopos, validade, último uso (o token em si é guardado só como hash)</td><td>autenticar integrações que você criou</td><td>execução de contrato (art. 7º, V)</td></tr>
+    <tr><td>Integração MCP (seu Claude)</td><td>tokens pessoais e conexões OAuth: nome do aplicativo cliente, escopos, validade, último uso (tokens e códigos guardados só como hash)</td><td>autenticar o Claude que você conectou</td><td>execução de contrato (art. 7º, V)</td></tr>
     <tr><td>Pagamento</td><td>e-mail do comprador, oferta, situação, valores e datas do pagamento (sem CPF, telefone, endereço ou cartão)</td><td>liberar e manter o acesso pago</td><td>execução de contrato (art. 7º, V)</td></tr>
   </tbody>
 </table>
@@ -199,18 +203,19 @@ reconhecimento facial para identificar pessoas: a detecção de rosto serve apen
 <ul>
   <li><strong>Hospedagem e armazenamento</strong>: {EMP} (provedor de nuvem ainda não definido; será identificado aqui antes do lançamento).</li>
   <li><strong>Cakto</strong> (pagamentos) — trata os dados de pagamento informados no checkout.</li>
-  <li><strong>Anthropic, PBC</strong> (EUA) — <em>somente quando a análise por IA estiver ativada</em>: recebe os frames selecionados e a transcrição da
-  janela do momento candidato. Pelos termos comerciais da Anthropic, o conteúdo enviado pela API não é usado para treinar os modelos dela.
-  O painel informa se a análise está conectada.</li>
+  <li><strong>Seu Claude (Anthropic)</strong> — não é nosso operador: o ClipeiAki não envia nada à Anthropic por conta própria. Quando
+  <em>você</em> conecta o seu Claude pelo MCP, ele pede ao ClipeiAki os dados que precisa (lista de transmissões, momentos, frames e transcrição
+  dos trechos) e os recebe na sua conta do Claude, onde são tratados conforme o seu contrato com a Anthropic. Você vê as conexões ativas e pode
+  desconectar em <em>Conta e plano</em>.</li>
   <li><strong>Twitch</strong> — não é nossa operadora: é a plataforma de origem das transmissões que você conecta. Ao abrir a página de inspeção,
   o player oficial da Twitch é carregado e segue as regras de privacidade da Twitch.</li>
   <li>Autoridades, quando houver obrigação legal ou ordem judicial.</li>
 </ul>
 
 <h2 id="p5">5. Transferência internacional</h2>
-<p>Quando a análise por IA estiver ativada, frames e transcrições são enviados à Anthropic, nos Estados Unidos (LGPD, art. 33). A ativação
-depende da formalização do mecanismo de transferência exigido pela ANPD (Res. CD/ANPD nº 19/2024 — cláusulas-padrão contratuais).
-O local do provedor de hospedagem será informado na seção 4.</p>
+<p>O ClipeiAki não transfere dados para fora do Brasil por iniciativa própria além do que depender do provedor de hospedagem (local informado
+na seção 4). Quando você conecta o seu Claude, os dados que ele solicita vão para a sua conta na Anthropic (EUA) por sua iniciativa
+(LGPD, art. 33); o enquadramento dessa hipótese está em validação jurídica.</p>
 
 <h2 id="p6">6. Por quanto tempo guardamos</h2>
 <table class="tbl">
@@ -218,7 +223,8 @@ O local do provedor de hospedagem será informado na seção 4.</p>
   <tbody>
     <tr><td>Blocos brutos da transmissão</td><td>apagados automaticamente após cerca de 10 minutos (ou enquanto um momento pendente precisar deles) e apagados por completo quando a sessão termina</td></tr>
     <tr><td>Preview da transmissão (último frame)</td><td>substituído a cada bloco e apagado quando a sessão termina</td></tr>
-    <tr><td>Frames enviados à IA, transcrições e momentos</td><td>até você excluir a conta</td></tr>
+    <tr><td>Trecho de um momento candidato aguardando revisão</td><td>até 15 minutos no buffer (depois só ficam os dados do momento)</td></tr>
+    <tr><td>Frames mostrados ao seu Claude, transcrições e momentos</td><td>até você excluir a conta</td></tr>
     <tr><td>Vídeos enviados e cortes</td><td>até você excluir o projeto ou a conta</td></tr>
     <tr><td>Conta, aceite, uso, tokens</td><td>até a exclusão da conta</td></tr>
     <tr><td>Registros de acesso (IP, data e hora)</td><td>6 meses (Marco Civil, art. 15), mesmo após a exclusão da conta; depois são apagados automaticamente</td></tr>
@@ -230,9 +236,9 @@ está em avaliação e, se adotada, será anunciada antes de entrar em vigor.</p
 
 <h2 id="p7">7. Segurança</h2>
 <p>Medidas que o sistema aplica hoje: senhas com hash scrypt; cookie de sessão HttpOnly e SameSite, enviado só por HTTPS em produção; tokens de sessão
-e de API guardados apenas como hash; tokens de API com escopos, validade e limite de requisições; isolamento por conta em todas as consultas e
+e de API guardados apenas como hash; tokens de API e conexões OAuth (PKCE, código de uso único, renovação com rotação) com escopos, validade e limite de requisições; isolamento por conta em todas as consultas e
 pastas de arquivos; proteção contra CSRF e política de segurança de conteúdo (CSP); limites de tentativas de login e de cadastro; chaves de
-serviços (como a da IA) apenas no servidor, nunca no navegador.</p>
+serviços apenas no servidor, nunca no navegador.</p>
 <p class="destaque">Não há, hoje, criptografia em repouso própria do aplicativo nem rotina de backup: isso depende do provedor de hospedagem ({EMP}).
 Em caso de incidente de segurança que possa causar risco ou dano relevante, comunicaremos a ANPD e os titulares afetados em até 3 dias úteis
 (Res. CD/ANPD nº 15/2024), e manteremos registro do incidente.</p>
@@ -370,12 +376,13 @@ DOC["regras-live-ia"] = ("Regras do Live Monitor, da IA e das Integrações", f"
   <li>Um processo no servidor da Eclyss (não o seu navegador) recebe a transmissão e grava blocos de 10 segundos.</li>
   <li>Detectores locais medem cada bloco: volume do áudio, mudanças bruscas de imagem e palavras de reação na transcrição.</li>
   <li>Trechos acima do normal viram <strong>momentos candidatos</strong>, com horário da transmissão.</li>
-  <li>Se a análise por IA estiver ativada, até 3 frames do momento e a transcrição da janela são enviados ao Claude (Anthropic), que devolve
-  uma decisão (cortar ou ignorar), confiança, início e fim propostos e uma justificativa. <strong>A IA não assiste à transmissão
-  continuamente</strong>: vê apenas o que foi enviado, e cada frame enviado aparece no painel com horário e SHA-256.</li>
+  <li>Se você conectou o seu Claude pelo MCP, ele pode pedir as evidências de um momento (até 3 frames e a transcrição da janela) e registrar
+  uma decisão (cortar ou ignorar), com início, fim, título e justificativa. <strong>O Claude não assiste à transmissão continuamente</strong>:
+  vê apenas o que pede, e cada frame mostrado a ele aparece no painel com horário e SHA-256. Sem o Claude conectado, você decide pelo painel.</li>
   <li>O motor de edição renderiza o corte; você revisa o preview e aprova antes de baixar.</li>
 </ol>
-<p>O monitoramento continua com a aba fechada. Cada sessão tem duração máxima e orçamento de IA; ao atingir um limite, a sessão para sozinha e o motivo aparece no painel.</p>
+<p>O monitoramento continua com a aba fechada. Cada sessão tem duração máxima; ao atingir um limite, a sessão para sozinha e o motivo aparece no
+painel. O trecho de um momento candidato fica disponível para revisão por cerca de 15 minutos.</p>
 
 <h2 id="r3">3. Limites do plano</h2>
 <p>Transmissões simultâneas (Creator: 3; Creator Studio: 10), horas de monitoramento e cortes por mês são aplicados pelo servidor. A capacidade
@@ -391,18 +398,21 @@ total do servidor também é limitada: se estiver cheia, o início de novas sess
   <li>O preview é o último frame <em>gravado</em> pelo servidor, com alguns segundos de atraso em relação ao player ao vivo.</li>
 </ul>
 
-<h2 id="r5">5. Integração MCP (controle por chat)</h2>
+<h2 id="r5">5. Integração MCP (seu Claude)</h2>
 <ul>
-  <li>Você cria tokens pessoais em <em>Conta e plano</em>, escolhendo escopos (leitura, controle, cortes) e validade (até 1 ano).</li>
+  <li><strong>claude.ai / Claude Desktop</strong>: adicione um conector personalizado com a URL do MCP do ClipeiAki; você será levado ao ClipeiAki
+  para entrar e autorizar. A tela mostra o aplicativo e o domínio de retorno: só autorize se foi você que iniciou a conexão.</li>
+  <li><strong>Claude Code</strong>: além do OAuth, você pode criar tokens pessoais em <em>Conta e plano</em>, escolhendo escopos e validade (até 1 ano).</li>
   <li>O token é mostrado uma única vez; guardamos só o hash. Revogue imediatamente se ele vazar.</li>
   <li>Há limite de requisições por token (padrão: 120 leituras e 20 ações por minuto).</li>
   <li>Comandos enviados pelo cliente MCP (por exemplo, o Claude) agem em nome da sua conta e seguem as mesmas regras e limites do painel.
   Conectar um canal por MCP também exige a declaração de direitos.</li>
 </ul>
 
-<h2 id="r6">6. Uso de IA de terceiros</h2>
-<p>Quando ativada, a análise usa a API da Anthropic. Os frames e trechos enviados são tratados conforme a <a href="/privacidade">Política de
-Privacidade</a> (inclusive a transferência internacional). O resultado da IA é uma sugestão: a decisão de publicar é sempre sua.</p>
+<h2 id="r6">6. IA</h2>
+<p>O ClipeiAki não usa API de IA paga: a análise contextual é feita pelo seu Claude, quando você o conecta, e conta no seu plano do Claude. As
+decisões dele são sugestões registradas no painel; o corte só é liberado para download depois da sua aprovação. Veja a
+<a href="/privacidade">Política de Privacidade</a>.</p>
 """)
 
 DOC["contato"] = ("Contato, Suporte e Exclusão de Dados", f"""

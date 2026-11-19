@@ -248,7 +248,7 @@ def revisar_momentos(stream_id: str = "") -> str:
     alvo = f"a transmissão {stream_id}" if stream_id else "todas as transmissões conectadas"
     return (f"Revise os momentos detectados em {alvo} do ClipeiAki:\n"
             "1. Chame list_connected_streamers e veja quais estão ao vivo.\n"
-            "2. Para cada uma, chame list_detected_moments com status 'candidate'.\n"
+            "2. Para cada uma, chame list_detected_moments com status 'candidate' e comece pelos de maior score (revise no máximo 10 por rodada).\n"
             "3. Para cada candidato, chame get_highlight e olhe os frames e a transcrição. Não invente o que não está neles.\n"
             "4. Decida com review_moment: 'clip' só para reação, susto, piada, jogada, briga ou revelação que funcione sozinha em 8 a 45 s;"
             " caso contrário 'skip'. Use start_t/end_t dentro da janela, começando um pouco antes do gatilho.\n"

@@ -67,12 +67,12 @@
   <div class="mods">
     <article class="mod reveal"><span class="st ok">Disponível</span><h3>Live Monitor</h3><p>Várias lives da Twitch numa grade, com preview e status.</p></article>
     <article class="mod reveal"><span class="st ok">Disponível</span><h3>Detecção de momentos</h3><p>Áudio, imagem e fala analisados no servidor.</p></article>
-    <article class="mod reveal"><span class="st soon">Requer ativação</span><h3>Análise com Claude</h3><p>A IA recebe frames e fala dos picos e propõe o corte. Você vê cada frame enviado.</p></article>
+    <article class="mod reveal"><span class="st ok">Beta</span><h3>Análise com seu Claude</h3><p>Seu Claude vê frames e falas dos picos e decide os cortes. Sem API paga.</p></article>
     <article class="mod reveal"><span class="st ok">Disponível</span><h3>Editor automático</h3><p>Corte, webcam, legenda karaokê; zoom e efeitos no Studio.</p></article>
     <article class="mod reveal"><span class="st part">Parcial</span><h3>Templates</h3><p>Moldura com seu @. Identidade visual própria em desenvolvimento.</p></article>
     <article class="mod reveal"><span class="st ok">Disponível</span><h3>Preview</h3><p>Assista e edite antes de aprovar.</p></article>
     <article class="mod reveal"><span class="st ok">Disponível</span><h3>Biblioteca</h3><p>Cortes aprovados, downloads e texto do post.</p></article>
-    <article class="mod reveal"><span class="st ok">Beta</span><h3>Integração MCP</h3><p>Controle o monitor por chat com o Claude.</p></article>
+    <article class="mod reveal"><span class="st ok">Beta</span><h3>Integração MCP</h3><p>Conector OAuth para claude.ai, Claude Desktop e Claude Code.</p></article>
     <article class="mod reveal"><span class="st ok">Disponível</span><h3>Exportação</h3><p>MP4 1080×1920 para Shorts, Reels e TikTok.</p></article>
   </div>
 </section>
@@ -86,7 +86,7 @@
         <li>Creator acompanha até <strong>{{CREATOR_SLOTS}}</strong> transmissões; Creator Studio, até <strong>{{STUDIO_SLOTS}}</strong>.</li>
         <li>Cada tela mostra o último frame gravado, status, tempo monitorado e momentos.</li>
         <li>Se a live cair, o agente reconecta sozinho.</li>
-        <li>Pelo MCP, o Claude consulta o status e aprova cortes por chat.</li>
+        <li>Pelo MCP, o seu Claude acompanha as lives e decide os cortes por chat.</li>
       </ul>
     </div>
     <figure class="shot reveal">
@@ -114,7 +114,7 @@
     <h2 id="h-plans" class="reveal">Planos</h2>
     <p class="sub reveal">Cobrança mensal pela Cakto. Cancele quando quiser; o acesso segue até o fim do período pago. Reembolso integral em até 7 dias.</p>
     {{PLANS_CARDS}}
-    <div class="tbl-wrap reveal">{{PLANS_TABLE}}</div>
+    <div class="tbl-wrap reveal" tabindex="0" role="region" aria-label="Comparação completa dos planos (role para os lados no celular)">{{PLANS_TABLE}}</div>
   </div>
 </section>
 
@@ -124,7 +124,8 @@
   <div class="faq">
     <details class="reveal"><summary>Preciso deixar o navegador aberto?</summary><p>Não. Tudo roda no servidor.</p></details>
     <details class="reveal"><summary>Quais plataformas são suportadas?</summary><p>Twitch. Outras plataformas estão em desenvolvimento.</p></details>
-    <details class="reveal"><summary>A IA assiste à live inteira?</summary><p>Não. Só frames e falas dos picos vão para a IA, quando ativa.</p></details>
+    <details class="reveal"><summary>A IA assiste à live inteira?</summary><p>Não. Pelo MCP, seu Claude recebe só frames e falas dos picos.</p></details>
+    <details class="reveal"><summary>Preciso pagar a API do Claude?</summary><p>Não. Você conecta o seu Claude; o uso conta no seu plano dele.</p></details>
     <details class="reveal"><summary>Posso monitorar o canal de outra pessoa?</summary><p>Só com autorização do titular, declarada ao conectar.</p></details>
     <details class="reveal"><summary>O monitoramento é ilimitado ou 24 horas?</summary><p>Não. Há duração por sessão e franquia mensal.</p></details>
     <details class="reveal"><summary>Os cortes são postados automaticamente?</summary><p>Não. Você aprova, baixa e posta.</p></details>

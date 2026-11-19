@@ -21,7 +21,7 @@ async function audit(page) {
   const b = await chromium.launch(); const res = { views: {}, legal: {}, errors: [], ok: true };
   const fail = (m) => { res.ok = false; res.errors.push(m); };
   for (const [name, w, h] of VIEWS) {
-    const ctx = await b.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 1 });
+    const ctx = await b.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 1, bypassCSP: true }); // só para injetar o axe-core
     const p = await ctx.newPage(); const errs = [];
     p.on('pageerror', (e) => errs.push('js: ' + e.message));
     p.on('console', (m) => { if (m.type() === 'error') errs.push('console: ' + m.text()); });
@@ -50,7 +50,7 @@ async function audit(page) {
     await ctx.close();
   }
   // reduced motion: tudo visível sem rolar
-  const ctx = await b.newContext({ viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce' }); const p = await ctx.newPage();
+  const ctx = await b.newContext({ viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce', bypassCSP: true }); const p = await ctx.newPage();
   await p.goto(BASE + '/', { waitUntil: 'networkidle' });
   res.reduced_motion_hidden = await p.evaluate(() => [...document.querySelectorAll('.reveal')].filter((el) => getComputedStyle(el).opacity !== '1').length);
   if (res.reduced_motion_hidden) fail('reduced-motion: blocos invisíveis');

@@ -237,7 +237,7 @@ def monitor(c, user):
     return {"plan": L["label"] if L else None, "slots": L["live_slots"] if L else 0, "active": _active_count(c, user["id"]),
             "usage": {"live_hours": u["live_hours"], "live_clips": u["live_clips"], "ai_usd": u["ai_usd"]},
             "quota": {"live_hours_per_month": L["live_hours_per_month"], "live_clips_per_month": L["live_clips_per_month"],
-                      "live_ai_usd_per_month": L.get("live_ai_usd_per_month", 0)} if L else None,
+                      } if L else None,
             "claude": dict(zip(("state", "detail"), claude_live.status())), "streams": list_streams(c, user["id"]),
             # servidor de TESTE tocando arquivos locais como se fossem lives: a interface mostra isso explicitamente
             "test_source": bool(os.environ.get("LIVE_SOURCE_OVERRIDE")),

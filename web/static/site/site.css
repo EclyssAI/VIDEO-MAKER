@@ -30,8 +30,8 @@ section { padding-block: clamp(56px, 8vw, 104px); }
   transition: background 180ms var(--ease), border-color 180ms var(--ease), transform 120ms ease-out; font: inherit; font-weight: 650; }
 .btn:hover { background: #26264a; border-color: rgba(255,255,255,.18); }
 .btn:active { transform: scale(.97); }
-.btn.primary { background: var(--primary); border-color: transparent; color: #fff; }
-.btn.primary:hover { background: #8a7bff; }
+.btn.primary { background: var(--primary-2); border-color: transparent; color: #fff; }  /* 5,2:1 com texto branco (WCAG AA) */
+.btn.primary:hover { background: #5443df; }
 .btn.ghost { background: transparent; }
 .btn.lg { min-height: 56px; padding: 0 1.7rem; font-size: 1.05rem; }
 .btn[aria-disabled="true"] { opacity: .6; cursor: not-allowed; }

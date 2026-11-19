@@ -53,25 +53,21 @@ def main():
     print(f"Base: rodada de {base['streams']} transmissões ({base['evidence_type']}). CPU da máquina inteira (agente + render + web) por transmissão: "
           f"**{mach_cores_stream:.2f} núcleo**. Premissa de VM: US$ {VM_USD_MONTH:.0f}/mês por {VM_CORES} vCPU → US$ {CORE_HOUR:.4f} por núcleo-hora.\n")
     print(f"- Infraestrutura (CPU): **US$ {infra_h:.4f} por transmissão-hora**.")
-    print(f"- IA (só se ativada): até {cand_h:.0f} candidatos/h medidos; teto de {CALLS_MAX_PER_HOUR:.0f} análises/h pelo intervalo entre candidatos. Custo por análise estimado "
-          f"({IN_TOK} tokens de entrada, {OUT_LOW}–{OUT_HIGH} de saída):")
-    for m in PRICES:
-        lo, hi = call_cost(m, OUT_LOW), call_cost(m, OUT_HIGH)
-        print(f"  - `{m}`: US$ {lo:.4f}–{hi:.4f} por análise → **US$ {lo * calls_h:.2f}–{hi * calls_h:.2f} por transmissão-hora** se todo candidato for analisado.")
+    print(f"- IA: **US$ 0 para a Eclyss** — não há API do Claude no servidor. A análise contextual é feita pelo Claude do próprio cliente, "
+          f"conectado por MCP. Referência de consumo no plano do cliente por momento revisado (get_highlight + review_moment): ~{IN_TOK} tokens de "
+          f"entrada (3 frames de 512×288 ≈ 790 tokens + JSON) e {OUT_LOW}–{OUT_HIGH} de saída. Com {cand_h:.0f} candidatos/h por transmissão, revisar "
+          f"todos seria ~{cand_h * IN_TOK / 1000:.0f} mil tokens de entrada por transmissão-hora — por isso o roteiro do MCP pede para revisar só "
+          f"os candidatos mais fortes (score) e o painel permite decidir manualmente.")
     print(f"\n## Custo mensal por assinante usando 100% da franquia\n")
-    print("| Plano | Preço | Receita em US$ (sem taxa Cakto, PENDENTE) | Horas/mês | Infra | Armazenamento dos cortes | IA Haiku 5.5 | IA Sonnet 5.5 | IA Opus 5.5 |")
+    print("| Plano | Preço | Receita em US$ (sem taxa Cakto, PENDENTE) | Horas/mês | CPU (infra) | Armazenamento dos cortes (acumula por mês) | IA | Total para a Eclyss | % da receita |")
     print("|---|---|---|---|---|---|---|---|---|")
     for k in ("creator", "studio"):
         L = PLANS[k]; h = L["live_hours_per_month"]; rev = L["price_brl"] / USD_BRL
-        stor = L["live_clips_per_month"] * CLIP_MB / 1024 * STORAGE_USD_GB_MONTH
-        ia = {m: (call_cost(m, OUT_LOW) * calls_h * h, call_cost(m, OUT_HIGH) * calls_h * h) for m in PRICES}
-        cap = L["live_budget_usd_max"] * h * 60 / L["live_max_minutes"]  # teto pelo orçamento por sessão
-        cell = lambda m: f"US$ {min(ia[m][0], cap):.2f}–{min(ia[m][1], cap):.2f}"
-        print(f"| {L['label']} | R$ {L['price_brl']:.2f} | US$ {rev:.2f} | {h} h | US$ {infra_h * h:.2f} | US$ {stor:.2f}/mês acumulado | {cell('claude-haiku-5-5')} | "
-              f"{cell('claude-sonnet-5-5')} | {cell('claude-opus-5-5')} |")
-    print(f"\nTeto de IA por mês já limitado pelo orçamento por sessão do plano (US$ {PLANS['creator']['live_budget_usd_max']:.2f} por sessão de "
-          f"{PLANS['creator']['live_max_minutes'] / 60:g} h no Creator; US$ {PLANS['studio']['live_budget_usd_max']:.2f} por {PLANS['studio']['live_max_minutes'] / 60:g} h no Studio). "
-          f"Câmbio de referência R$ {USD_BRL:.2f}/US$.")
+        stor = L["live_clips_per_month"] * CLIP_MB / 1024 * STORAGE_USD_GB_MONTH; tot = infra_h * h + stor
+        print(f"| {L['label']} | R$ {L['price_brl']:.2f} | US$ {rev:.2f} | {h} h | US$ {infra_h * h:.2f} | US$ {stor:.2f} | US$ 0 (Claude do cliente) | "
+              f"US$ {tot:.2f} | {tot / rev * 100:.0f}% |")
+    print(f"\nCâmbio de referência R$ {USD_BRL:.2f}/US$. Sem taxa da Cakto (PENDENTE). Banda de entrada não cobrada pela maioria dos provedores "
+          f"(entrada), mas medida: {base.get('input_gb_per_stream_hour')} GB por transmissão-hora.")
 
 
 if __name__ == "__main__": main()

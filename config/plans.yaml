@@ -1,7 +1,8 @@
 # Limites por plano do ClipeiAki (fonte única: backend, conta e landing leem daqui).
 # minutes_per_month = minutos de vídeo ENVIADOS (upload) no mês corrente.
 # live_slots = transmissões conectadas/monitoradas AO MESMO TEMPO (aplicado no backend, por conta).
-# live_hours_per_month / live_clips_per_month / live_ai_usd_per_month = franquias do Live Monitor. STATUS: PROPOSTA calculada a partir dos testes
+# live_hours_per_month / live_clips_per_month = franquias do Live Monitor (a análise por IA é feita pelo Claude do
+#   próprio cliente via MCP, sem custo de API para a Eclyss). STATUS: PROPOSTA calculada a partir dos testes
 #   de carga (docs/CAPACIDADE_E_CUSTOS.md) — aguardando aprovação comercial antes da venda pública.
 plans:
   beta:            # acesso de demonstração (sem assinatura) — habilitado por BETA_SIGNUP=1
@@ -19,7 +20,6 @@ plans:
     live_slots: 1
     live_hours_per_month: 2
     live_clips_per_month: 10
-    live_ai_usd_per_month: 0.50   # PROPOSTA: teto de gasto com a API do Claude no mês
   creator:
     label: "Creator"
     price_brl: 49.90
@@ -35,7 +35,6 @@ plans:
     live_slots: 3
     live_hours_per_month: 60
     live_clips_per_month: 150
-    live_ai_usd_per_month: 2.00   # PROPOSTA: teto de gasto com a API do Claude no mês
   studio:
     label: "Creator Studio"
     price_brl: 69.90
@@ -51,4 +50,3 @@ plans:
     live_slots: 10
     live_hours_per_month: 200
     live_clips_per_month: 500
-    live_ai_usd_per_month: 4.00   # PROPOSTA: teto de gasto com a API do Claude no mês

@@ -66,10 +66,20 @@ MIGRATIONS = {
 
 
 def migrate(c):
-    for table, cols in MIGRATIONS.items():
-        have = {r[1] for r in c.execute(f"PRAGMA table_info({table})")}
-        for col, decl in cols.items():
-            if col not in have: c.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
+    """Idempotente e segura com web, worker e agente subindo ao mesmo tempo: roda numa transação exclusiva e tolera a
+    coluna já criada por outro processo (antes: o segundo processo morria com "duplicate column")."""
+    c.execute("BEGIN IMMEDIATE")
+    try:
+        for table, cols in MIGRATIONS.items():
+            have = {r[1] for r in c.execute(f"PRAGMA table_info({table})")}
+            for col, decl in cols.items():
+                if col in have: continue
+                try: c.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
+                except sqlite3.OperationalError as e:
+                    if "duplicate column" not in str(e): raise
+        c.execute("COMMIT")
+    except Exception:
+        c.execute("ROLLBACK"); raise
 
 
 def now(): return time.time()

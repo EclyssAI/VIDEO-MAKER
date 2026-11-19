@@ -32,8 +32,12 @@ def charge_ai(c, uid, usd):
 
 
 def ai_left(c, user):
+    """Teto mensal da IA NO SERVIDOR (caminho opcional, desligado por padrão: a análise é feita pelo Claude do cliente via MCP).
+    Sem valor no plano, vale LIVE_AI_USD_PER_MONTH do operador; sem ela, só o orçamento por sessão limita."""
     L = limits(effective_plan(user))
-    return max(0.0, L.get("live_ai_usd_per_month", 0) - usage(c, user["id"])["ai_usd"]) if L else 0.0
+    if not L: return 0.0
+    cap = L.get("live_ai_usd_per_month", float(os.environ.get("LIVE_AI_USD_PER_MONTH", "inf")))
+    return max(0.0, cap - usage(c, user["id"])["ai_usd"])
 
 
 def charge_live(c, uid, seconds):
